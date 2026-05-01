@@ -18,15 +18,6 @@ The tool was scoped in two tiers from the start.
 
 ### Tier 1 — what's built (this repo, version 1)
 
-Tier 1 is the **simplest thing that demonstrates the analysis to
-someone who isn't running Python**. It is single-page, single-config,
-local-only, and deliberately under-featured. Its goals:
-
-1. Replace "let me email you the figures" with "open this and click around."
-2. Let Dr Nash interrogate any of the 13 configs on his own machine.
-3. Be readable in two days of code (~700 lines including data prep).
-4. Stay in sync with the paper's `Final_Results/` analysis automatically.
-
 What's in Tier 1 (everything in this folder):
 
 - Interactive map of the Shannon Estuary, one turbine config at a time
@@ -43,8 +34,6 @@ What's in Tier 1 (everything in this folder):
 
 ### Tier 2 — deferred (not built)
 
-Tier 2 is the "make this publishable on the SEAI website" version.
-Bigger ambition, more code, hosted publicly. Items discussed but not built:
 
 - Side-by-side comparison of two turbine configs (or a difference map)
 - Multi-page app (separate methodology / about / glossary pages)
@@ -60,8 +49,7 @@ Bigger ambition, more code, hosted publicly. Items discussed but not built:
 - Screenshot showcase / hero image for the README
 
 If/when Tier 2 ships, it will live under
-<https://github.com/eftekhari-alireza/eftekhari-alireza.github.io>. For
-now, this is local-only.
+<https://github.com/eftekhari-alireza/eftekhari-alireza.github.io>. 
 
 ---
 
@@ -172,20 +160,6 @@ P_r_kW = 0.5 × Cp × ρ × (π × D² / 4) × Vᵣ³ / 1000
 Cp = 0.40,  ρ = 1025 kg/m³
 ```
 
-This matches `Final_Results/4.4_Economic_Considerations`.
-
-### Re-running
-
-If the paper's analysis changes — Set14/Set15 land, V1↔V2 depth flip,
-new strategic site, mask boundary moves — rerun:
-
-```bash
-python tool/build_data.py
-```
-
-The script imports `Final_Results/_shared/` so it picks up changes
-automatically. The app loads the new Parquet on its next launch.
-
 ---
 
 ## App layer — `app.py`
@@ -285,8 +259,7 @@ main area with the visualisations.
 - **Top-N selection**: respects all spatial filters. If you tick
   "Strategic sites only," the top 10 are picked from inside the sites,
   not the whole estuary.
-- **Map orientation**: north is at the top (matches `Final_Results/
-  figure_1_resource_distribution.py`). DIVAST row 0 corresponds to
+- **Map orientation**: north is at the top. DIVAST row 0 corresponds to
   the high-Y northern boundary; the y-axis is reversed accordingly.
 - **Inspect-cell × marker**: stays put when filters change, so you
   can compare the same physical location across different views.
@@ -326,10 +299,6 @@ tool/
     ├── shannon_grid.parquet     ← compact wide-format table (~0.7 MB)
     └── metadata.json            ← grid + per-config metadata
 ```
-
-`tool/data/` is created by `build_data.py` on first run. The parquet is
-small enough to commit to Git; alternatively `.gitignore` it and let
-each clone regenerate it.
 
 ---
 
