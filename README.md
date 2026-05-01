@@ -32,7 +32,7 @@ What's in Tier 1 (everything in this folder):
 - Always-on land underlay (sandy brown) + sea background (light blue)
 - Tooltips on every metric explaining methodology and caveats
 
-### Tier 2 — deferred (not built)
+### Tier 2 — in progress
 
 
 - Side-by-side comparison of two turbine configs (or a difference map)
