@@ -1,0 +1,121 @@
+{
+  "rows": 110019,
+  "columns": 54,
+  "imax": 217,
+  "jmax": 507,
+  "delx_m": 189.0,
+  "cell_area_km2": 0.035721,
+  "estuary_cells": 14612,
+  "shipping_cells_in_estuary": 4289,
+  "site_cells_in_estuary": 601,
+  "configs": [
+    {
+      "label": "Set01",
+      "D_m": 20,
+      "Vr_mps": 2.5,
+      "Pr_kW": 1006.29,
+      "n_class3": 215,
+      "n_class3_estuary": 215
+    },
+    {
+      "label": "Set02",
+      "D_m": 20,
+      "Vr_mps": 2.0,
+      "Pr_kW": 515.22,
+      "n_class3": 215,
+      "n_class3_estuary": 215
+    },
+    {
+      "label": "Set03",
+      "D_m": 15,
+      "Vr_mps": 2.5,
+      "Pr_kW": 566.04,
+      "n_class3": 709,
+      "n_class3_estuary": 709
+    },
+    {
+      "label": "Set04",
+      "D_m": 15,
+      "Vr_mps": 2.0,
+      "Pr_kW": 289.81,
+      "n_class3": 737,
+      "n_class3_estuary": 737
+    },
+    {
+      "label": "Set05",
+      "D_m": 10,
+      "Vr_mps": 2.5,
+      "Pr_kW": 251.57,
+      "n_class3": 1531,
+      "n_class3_estuary": 1531
+    },
+    {
+      "label": "Set06",
+      "D_m": 10,
+      "Vr_mps": 2.0,
+      "Pr_kW": 128.81,
+      "n_class3": 1693,
+      "n_class3_estuary": 1690
+    },
+    {
+      "label": "Set07",
+      "D_m": 5,
+      "Vr_mps": 2.5,
+      "Pr_kW": 62.89,
+      "n_class3": 2420,
+      "n_class3_estuary": 2420
+    },
+    {
+      "label": "Set08",
+      "D_m": 5,
+      "Vr_mps": 2.0,
+      "Pr_kW": 32.2,
+      "n_class3": 2746,
+      "n_class3_estuary": 2738
+    },
+    {
+      "label": "Set09",
+      "D_m": 3,
+      "Vr_mps": 2.5,
+      "Pr_kW": 22.64,
+      "n_class3": 2802,
+      "n_class3_estuary": 2802
+    },
+    {
+      "label": "Set10",
+      "D_m": 3,
+      "Vr_mps": 2.0,
+      "Pr_kW": 11.59,
+      "n_class3": 3273,
+      "n_class3_estuary": 3265
+    },
+    {
+      "label": "Set11",
+      "D_m": 10,
+      "Vr_mps": 1.5,
+      "Pr_kW": 54.34,
+      "n_class3": 2160,
+      "n_class3_estuary": 2127
+    },
+    {
+      "label": "Set12",
+      "D_m": 5,
+      "Vr_mps": 1.5,
+      "Pr_kW": 13.58,
+      "n_class3": 3443,
+      "n_class3_estuary": 3403
+    },
+    {
+      "label": "Set13",
+      "D_m": 3,
+      "Vr_mps": 1.5,
+      "Pr_kW": 4.89,
+      "n_class3": 4045,
+      "n_class3_estuary": 4005
+    }
+  ],
+  "cp": 0.4,
+  "rho": 1025.0,
+  "hours_per_year": 8760,
+  "build_timestamp_utc": "2026-05-01T02:36:17Z"
+}

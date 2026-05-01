@@ -1,0 +1,9 @@
+# Shannon Tidal Resource Explorer — Tier 1 dependencies
+# Tested on Python 3.12 (also works on 3.10 / 3.11 / 3.13).
+
+streamlit>=1.30
+plotly>=5.18,<6                # Plotly 6 changed JSON schema; older Streamlit can't render it
+pandas>=2.0
+numpy>=1.26
+pyarrow>=14.0                  # parquet reader/writer
+streamlit-plotly-events>=0.0.6 # optional — enables click-to-inspect on the map
