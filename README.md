@@ -314,51 +314,6 @@ pure visualisation layer over the paper's authoritative numbers.
 
 ---
 
-## Honest caveats and limitations
-
-A few things worth knowing before drawing conclusions from the tool.
-
-**Annual energy is from a 372-day simulation** — `TIMESM = 8928 hours`
-in the DIVAST input file. That's ~1.018 years. The reported MWh/yr is
-therefore ~1.8% above a strict 365-day annual estimate. The tooltip on
-the *Mean energy / turbine* metric mentions "one full year (365 days)"
-as a rounded reference; the underlying number is closer to 372 days.
-
-**"Theoretical max (1 turbine/cell)" is an upper bound.** The metric
-sums per-cell annual energy assuming exactly one turbine per
-189 m × 189 m cell. That's roughly OK for D = 20 m turbines (cell
-spacing ≈ 9.5 D, close to typical 5–10 D wake spacing) but heavily
-underestimates packing density for D = 3–5 m turbines (cell spacing
-38–63 D, much more sparse than realistic). Use this number as a
-**relative comparator across configs**, not as an absolute resource
-estimate. The tooltip on this metric spells this out.
-
-**Capacity factor uses a fixed Cp = 0.40 and ρ = 1025 kg/m³.** Real
-turbines have Cp curves that vary with tip-speed ratio and Reynolds
-number. The fixed-Cp assumption is the standard Lewis et al. (2021)
-simplification and is internally consistent with the paper.
-
-**Peak velocity is capped at 3.0 m/s** by Shannon.f (this caps a
-known model artefact in some narrow-channel cells). The tool just
-reads the capped values; you'll see 3.0 m/s as the maximum in the
-peak-velocity field.
-
-**Set14 and Set15** (D = 20 m and D = 15 m at Vᵣ = 1.5 m/s) are not
-yet simulated. They appear in `Final_Results/_shared/turbine_configs.py`
-with `available=False` and are silently skipped by `build_data.py`.
-When the runs land, flip `available=True` and rerun the build script.
-
-**No farm-array effects.** Wakes between adjacent turbines, blockage,
-and array efficiency factors are not modelled anywhere in this pipeline.
-Resource numbers are single-turbine, isolated.
-
-**Cell coordinates are DIVAST grid indices**, not lat/lon or projected
-coords. The (x, y) metres in the parquet are arbitrary domain-relative
-coordinates, not real-world. Useful for relative positioning on the
-map; not useful for overlaying on a GIS.
-
----
-
 ## File layout
 
 ```
@@ -403,19 +358,12 @@ In rough priority order, things to do next if/when there's time:
 - **Custom packing-density slider** for the resource estimate.
 - **SEAI 2005 baseline reference card** in the metric strip.
 
-When Set14 / Set15 land, just flip their `available` flags in
-`Final_Results/_shared/turbine_configs.py` and rerun
-`build_data.py`. The app's selector will pick them up automatically.
-
 ---
 
 ## Project context
 
 This tool is part of the Shannon Estuary tidal-energy assessment
-research (University of Galway, 2026), supervised by Dr Michael Hartnett
-and Dr Stephen Nash. The DIVAST 2D depth-integrated model
-(Falconer 1992) was run for a 5 × 3 turbine design grid; the analysis
-and figures live in `Final_Results/` (sections 4.1–4.5 of the paper).
+research (University of Galway, 2026), supervised by Dr Stephen Nash.
 
 Future public hosting: <https://github.com/eftekhari-alireza/eftekhari-alireza.github.io>
 
