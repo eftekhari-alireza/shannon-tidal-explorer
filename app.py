@@ -4,8 +4,7 @@ Shannon Tidal Resource Explorer — STREAMLIT APP (Tier 1)
 ================================================================================
 Loads tool/data/shannon_grid.parquet (built once via tool/build_data.py)
 and provides an interactive map of the Shannon Estuary tidal-current
-resource for 13 turbine configurations (5 diameters × 3 rated velocities,
-minus the 2 still-pending model runs).
+resource for 15 turbine configurations (5 diameters × 3 rated velocities).
 
 Run locally:
     pip install -r tool/requirements.txt
@@ -518,7 +517,7 @@ if hist_values.size:
 
 
 # --------------------------------------------------------------------------
-# CELL INSPECTOR — see all 13 configs at a single cell
+# CELL INSPECTOR — see all 15 configs at a single cell
 # --------------------------------------------------------------------------
 with st.expander(
     f"🔍  Cell inspector — see all {len(CONFIGS_AVAIL)} configs at one cell",

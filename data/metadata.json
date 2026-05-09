@@ -1,6 +1,6 @@
 {
   "rows": 110019,
-  "columns": 54,
+  "columns": 60,
   "imax": 217,
   "jmax": 507,
   "delx_m": 189.0,
@@ -112,10 +112,26 @@
       "Pr_kW": 4.89,
       "n_class3": 4045,
       "n_class3_estuary": 4005
+    },
+    {
+      "label": "Set14",
+      "D_m": 20,
+      "Vr_mps": 1.5,
+      "Pr_kW": 217.36,
+      "n_class3": 242,
+      "n_class3_estuary": 220
+    },
+    {
+      "label": "Set15",
+      "D_m": 15,
+      "Vr_mps": 1.5,
+      "Pr_kW": 122.26,
+      "n_class3": 948,
+      "n_class3_estuary": 921
     }
   ],
   "cp": 0.4,
   "rho": 1025.0,
   "hours_per_year": 8760,
-  "build_timestamp_utc": "2026-05-01T02:36:17Z"
+  "build_timestamp_utc": "2026-05-09T04:29:53Z"
 }

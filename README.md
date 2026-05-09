@@ -2,13 +2,26 @@
 
 A local-first Streamlit web app that turns the DIVAST 2D hydrodynamic
 model output into an interactive map of the Shannon Estuary's
-tidal-current energy resource. Pick one of the 13 turbine configurations,
-look at the map, click a cell, drag a threshold slider, download the
-underlying data — all without touching a `.dat` file.
+tidal-current energy resource. Pick one of the 15 turbine configurations,
+click any cell, drag a threshold slider, download the underlying data —
+all without touching a `.dat` file.
 
 The tool is the companion to the Shannon Estuary tidal-energy paper
 (Eftekhari et al., in prep) and is designed to make the paper's analysis
 explorable in a browser, on a laptop, with no cloud dependencies.
+
+---
+
+## Live demo
+
+| Where | What you see |
+|---|---|
+| [shannon-tidal-explorer.streamlit.app](https://shannon-tidal-explorer.streamlit.app/) | The standalone app, full screen |
+| [eftekhari-alireza.github.io/Shannon-Tidal-Resource-Explorer](https://eftekhari-alireza.github.io/Shannon-Tidal-Resource-Explorer/) | The same app embedded in a portfolio page with description and context |
+
+The app is hosted free on Streamlit Community Cloud and auto-redeploys
+from this repo on every push to `main`. **Just want to play with it?**
+Open either link — no install needed.
 
 ---
 
@@ -18,22 +31,37 @@ The tool was scoped in two tiers from the start.
 
 ### Tier 1 — what's built (this repo, version 1)
 
+Tier 1 is the **simplest thing that demonstrates the analysis to
+someone who isn't running Python**. It is single-page, single-config,
+and deliberately under-featured. Its goals:
+
+1. Replace "let me email you the figures" with "open this and click around."
+2. Let supervisors and collaborators interrogate any of the 15 configs
+   on their own machine or in a browser.
+3. Be readable in two days of code (~700 lines including data prep).
+4. Stay in sync with the paper's analysis automatically.
+
 What's in Tier 1 (everything in this folder):
 
 - Interactive map of the Shannon Estuary, one turbine config at a time
 - Three map fields: Annual energy, Capacity factor, Peak velocity
 - Live spatial filters (shipping lane, strategic sites, viable cells)
-- Cell inspector — click any cell to see all 13 configs at that location
-- Top-10 best cells highlight
-- Distribution histogram of the visible field
+- Cell inspector — click any cell to see all 15 configs at that location,
+  or type the (i, j) coordinates manually
+- Top-10 best cells highlight (respects active spatial filters)
+- Distribution histogram of the visible field below the map
 - Cumulative-area-vs-threshold curve with interactive slider
-- 13-config comparison table
-- CSV download of the visible cells
+- 15-config comparison table for the visible region
+- CSV download of the visible cells (one click, in the sidebar)
 - Always-on land underlay (sandy brown) + sea background (light blue)
 - Tooltips on every metric explaining methodology and caveats
+- Stable layout — switching fields/filters never shifts the map or colorbar
+- Hosted publicly on Streamlit Community Cloud with auto-redeploy
+- Embedded on a portfolio page with description
 
-### Tier 2 — in progress
+### Tier 2 — deferred (not built)
 
+Tier 2 is the bigger-ambition version. Items discussed but not built:
 
 - Side-by-side comparison of two turbine configs (or a difference map)
 - Multi-page app (separate methodology / about / glossary pages)
@@ -45,11 +73,7 @@ What's in Tier 1 (everything in this folder):
 - Time-series playback (would require rebuilding the data pipeline
   to retain hourly velocity)
 - LCOE / economics calculator
-- Public web hosting (GitHub Pages, Streamlit Community Cloud, etc.)
 - Screenshot showcase / hero image for the README
-
-If/when Tier 2 ships, it will live under
-<https://github.com/eftekhari-alireza/eftekhari-alireza.github.io>. 
 
 ---
 
@@ -58,28 +82,27 @@ If/when Tier 2 ships, it will live under
 You'll need Python 3.10 or newer (3.12 / 3.13 also tested).
 
 ```bash
-# from the project root
-cd DIVAST-Turbine
+# clone the repo
+git clone https://github.com/eftekhari-alireza/shannon-tidal-explorer.git
+cd shannon-tidal-explorer
 
 # install dependencies (a venv is fine but not required)
-pip install -r tool/requirements.txt
+pip install -r requirements.txt
 
 # (optional, for click-to-inspect on the map)
 pip install streamlit-plotly-events
 
-# build the parquet file (one-off — takes ~15-30 s)
-python tool/build_data.py
-
 # launch the app
-streamlit run tool/app.py
+streamlit run app.py
 ```
 
 The app opens automatically in your default browser at
 <http://localhost:8501>. Stop it with Ctrl+C in the terminal.
 
-If `streamlit-plotly-events` is not installed, the app still works —
-you just lose the click-to-inspect feature and have to type cell
-coordinates manually.
+The pre-built parquet ships with this repo (~0.7 MB), so you don't need
+to regenerate it yourself. If `streamlit-plotly-events` is not installed,
+the app still works — you just lose the click-to-inspect feature and
+have to type cell coordinates manually.
 
 ---
 
@@ -99,34 +122,39 @@ without disturbing the other:
                            │              │
                            ▼              ▼
                   ┌──────────────────────────┐
-                  │  tool/build_data.py       │   one-off (15 s)
+                  │  build_data.py            │   one-off (15 s)
                   └──────────────────────────┘
                            │
                            ▼
                   ┌──────────────────────────┐
-                  │  tool/data/               │
+                  │  data/                    │
                   │   shannon_grid.parquet    │   ≈ 0.7 MB, 110,019 rows
                   │   metadata.json           │
                   └──────────────────────────┘
                            │
                            ▼
                   ┌──────────────────────────┐
-                  │  tool/app.py              │   live, interactive
+                  │  app.py                   │   live, interactive
                   │   (Streamlit + Plotly)    │
                   └──────────────────────────┘
 ```
 
 **Why the two layers?** Re-parsing the F15.3 fixed-width `.dat` files on
-every page-load is too slow (≈ 5 s × 13 files = 65 s). The data prep
+every page-load is too slow (≈ 5 s × 15 files = 75 s). The data prep
 script does it once, writes a single compact Parquet, and the app reads
 it in < 100 ms.
+
+`build_data.py` lives in the parent research project workspace
+(`DIVAST-Turbine/tool/build_data.py`); the parquet it produces is
+pre-built and committed to this repo so the public version is
+self-contained and runnable without any of the underlying `.dat` files.
 
 ---
 
 ## Data layer — `build_data.py`
 
-A one-off script that reads the 13 SHANNONMAXVEL.dat files plus the
-three masks, and writes one Parquet file at `tool/data/shannon_grid.parquet`.
+A one-off script that reads the 15 SHANNONMAXVEL.dat files plus the
+three masks, and writes one Parquet file at `data/shannon_grid.parquet`.
 
 ### Schema (wide format, one row per DIVAST grid cell)
 
@@ -142,12 +170,12 @@ three masks, and writes one Parquet file at `tool/data/shannon_grid.parquet`.
 | | `site_q/r/s/t` | bool | individual strategic-site flags |
 | Set-independent | `peak_vel_mps` | float32 | DIVAST peak velocity, capped at 3.0 m/s |
 | | `avg_pd_kwm2` | float32 | time-averaged available power density (kW/m²) |
-| Per-config × 13 | `{Set##}_viable` | bool | Class 3 (depth + velocity criteria met) |
+| Per-config × 15 | `{Set##}_viable` | bool | Class 3 (depth + velocity criteria met) |
 | | `{Set##}_energy_mwh` | float32 | annual energy with depth+velocity constraint |
 | | `{Set##}_cf_pct` | float32 | capacity factor in percent |
 
-Total: ~50 columns × 110,019 rows × float32/bool ≈ ~0.7 MB on disk
-(snappy compression). Easy to commit to Git or to drop into a Slack DM.
+Total: 54 columns × 110,019 rows × float32/bool ≈ ~0.7 MB on disk
+(snappy compression). Easy to commit to Git.
 
 A small `metadata.json` sidecar carries grid constants (IMAX, JMAX,
 cell area), per-config rated power, and a build timestamp.
@@ -160,6 +188,22 @@ P_r_kW = 0.5 × Cp × ρ × (π × D² / 4) × Vᵣ³ / 1000
 Cp = 0.40,  ρ = 1025 kg/m³
 ```
 
+This matches `Final_Results/4.4_Economic_Considerations`.
+
+### Re-running
+
+If the paper's analysis changes — depth-criterion swap (bEMEC ↔ rEMEC),
+new strategic site, mask boundary moves — rerun:
+
+```bash
+# from the parent DIVAST-Turbine workspace
+python tool/build_data.py
+```
+
+The script imports `Final_Results/_shared/` so it picks up changes
+automatically. Then copy the regenerated `data/shannon_grid.parquet`
+and `data/metadata.json` into this repo and commit.
+
 ---
 
 ## App layer — `app.py`
@@ -170,14 +214,12 @@ main area with the visualisations.
 
 ### Sidebar (left, fixed)
 
-1. **Turbine configuration** — dropdown selector for one of 13 configs
-   (Set01–Set13). The 5 × 3 grid is: 5 rotor diameters
+1. **Turbine configuration** — dropdown selector for one of 15 configs
+   (Set01–Set15). The 5 × 3 grid is: 5 rotor diameters
    (3, 5, 10, 15, 20 m) × 3 rated velocities (1.5, 2.0, 2.5 m/s).
-   Set14 and Set15 are reserved for the two pending V1.5 runs.
 
 2. **Map field** — radio button for the field to colour the map by:
    Annual energy (MWh/yr), Capacity factor (%), or Peak velocity (m/s).
-
    Below the radio, a checkbox enables **"Highlight top 10 cells"** —
    draws red circle outlines around the 10 highest-value cells in the
    currently-visible region.
@@ -206,7 +248,7 @@ main area with the visualisations.
    (1 turbine/cell)" (GWh/yr). Each card has a hover tooltip
    explaining methodology and caveats.
 
-2. **Map** — Plotly heatmap with three / four layers:
+2. **Map** — Plotly heatmap with multiple layers:
    - Layer 1: Land — sandy-brown raster, always visible
    - Layer 2: Data — viridis / plasma / turbo, NaN-masked outside
      the visible region (so the land underlay shows through)
@@ -217,15 +259,13 @@ main area with the visualisations.
    never shifts the plot box or the colorbar position.
 
 3. **Histogram strip** — small (~160 px) horizontal histogram of the
-   currently-active field's distribution across visible cells. Helpful
-   for spotting whether the resource is concentrated in a few hotspots
-   or spread evenly.
+   currently-active field's distribution across visible cells.
 
 4. **Cell inspector (expandable)** — type (i, j) coordinates OR click
    directly on the map (requires `streamlit-plotly-events`). Shows:
    - 4 context metrics for that cell: peak velocity, average power
      density, in-estuary flag, in-shipping-lane flag
-   - 13-row table — for each turbine config, the cell's viability
+   - 15-row table — for each turbine config, the cell's viability
      flag, annual energy (MWh/yr), and capacity factor (%)
 
    Default cell on first load: the highest-peak-velocity cell in the
@@ -244,7 +284,7 @@ main area with the visualisations.
 6. **Filter details (expandable)** — text breakdown of the visible
    region: cell counts, viable area, mean CF, total resource.
 
-7. **Configuration comparison table (expandable)** — 13-row table
+7. **Configuration comparison table (expandable)** — 15-row table
    showing every config's stats over the currently-visible region,
    for direct comparison.
 
@@ -263,6 +303,38 @@ main area with the visualisations.
   the high-Y northern boundary; the y-axis is reversed accordingly.
 - **Inspect-cell × marker**: stays put when filters change, so you
   can compare the same physical location across different views.
+
+---
+
+## Deployment
+
+The live app is hosted on **Streamlit Community Cloud** (free tier).
+Every push to the `main` branch triggers an auto-redeploy:
+
+1. Push code change to GitHub `main`
+2. Streamlit Cloud detects the push within ~30 seconds
+3. Rebuilds the container (~1–2 minutes for code-only changes,
+   slightly longer if `requirements.txt` changed)
+4. New version goes live without downtime — failed builds keep the
+   old version running, so visitors are never seeing a broken app
+
+The same app is embedded inline at
+<https://eftekhari-alireza.github.io/Shannon-Tidal-Resource-Explorer/>
+via an iframe with the `?embed=true` query parameter to hide
+Streamlit Cloud's chrome.
+
+### Iteration loop
+
+```
+edit locally → test (streamlit run app.py) → git commit → git push
+                                                              ↓
+                              Streamlit Cloud auto-rebuilds (~2 min)
+                                                              ↓
+                                                        live URL updated
+```
+
+No manual redeploy step. Updates land in front of users within a couple
+of minutes of pushing to `main`.
 
 ---
 
@@ -287,18 +359,67 @@ pure visualisation layer over the paper's authoritative numbers.
 
 ---
 
+## Honest caveats and limitations
+
+A few things worth knowing before drawing conclusions from the tool.
+
+**Annual energy is from a 372-day simulation** — `TIMESM = 8928 hours`
+in the DIVAST input file. That's ~1.018 years. The reported MWh/yr is
+therefore ~1.8% above a strict 365-day annual estimate. The tooltip on
+the *Mean energy / turbine* metric mentions "one full year (365 days)"
+as a rounded reference; the underlying number is closer to 372 days.
+
+**"Theoretical max (1 turbine/cell)" is an upper bound.** The metric
+sums per-cell annual energy assuming exactly one turbine per
+189 m × 189 m cell. That's roughly OK for D = 20 m turbines (cell
+spacing ≈ 9.5 D, close to typical 5–10 D wake spacing) but heavily
+underestimates packing density for D = 3–5 m turbines (cell spacing
+38–63 D, much more sparse than realistic). Use this number as a
+**relative comparator across configs**, not as an absolute resource
+estimate. The tooltip on this metric spells this out.
+
+**Capacity factor uses a fixed Cp = 0.40 and ρ = 1025 kg/m³.** Real
+turbines have Cp curves that vary with tip-speed ratio and Reynolds
+number. The fixed-Cp assumption is the standard Lewis et al. (2021)
+simplification and is internally consistent with the paper.
+
+**Peak velocity is capped at 3.0 m/s** by Shannon.f (this caps a
+known model artefact in some narrow-channel cells). The tool just
+reads the capped values; you'll see 3.0 m/s as the maximum in the
+peak-velocity field.
+
+**No farm-array effects.** Wakes between adjacent turbines, blockage,
+and array efficiency factors are not modelled anywhere in this
+visualisation pipeline. Resource numbers are single-turbine, isolated.
+(For the array-aware fleet-sizing analysis with three packing scenarios,
+see the paper's §4.6.)
+
+**Cell coordinates are DIVAST grid indices**, not lat/lon or projected
+coords. The (x, y) metres in the parquet are arbitrary domain-relative
+coordinates, not real-world. Useful for relative positioning on the
+map; not useful for overlaying on a GIS.
+
+---
+
 ## File layout
 
 ```
-tool/
-├── README.md             ← this file
+shannon-tidal-explorer/
+├── README.md             ← this file (canonical)
 ├── requirements.txt      ← Python deps
-├── build_data.py         ← one-off data prep (~250 lines)
 ├── app.py                ← Streamlit app (~700 lines)
+├── .gitignore
+├── .gitattributes
 └── data/
     ├── shannon_grid.parquet     ← compact wide-format table (~0.7 MB)
     └── metadata.json            ← grid + per-config metadata
 ```
+
+`build_data.py` is **not** in this public repo. It lives in the parent
+research project at `DIVAST-Turbine/tool/build_data.py` because it
+imports the paper's `Final_Results/_shared/*` analysis modules. The
+parquet it produces is pre-built and committed here so the public
+version is fully self-contained.
 
 ---
 
@@ -324,17 +445,27 @@ In rough priority order, things to do next if/when there's time:
 - **Methodology page** explaining DIVAST, Class 3, cut-in, Lewis 2021,
   etc., as a separate Streamlit page.
 - **URL state encoding** so views are shareable.
-- **Custom packing-density slider** for the resource estimate.
+- **Custom packing-density slider** for the resource estimate
+  (could expose the three packing scenarios from §4.6 of the paper).
 - **SEAI 2005 baseline reference card** in the metric strip.
+- **PNG export** with embedded caption metadata.
+- **Polygon-draw region select** for custom statistics.
+
+When the paper's analysis changes (mask boundary moves, depth criterion
+swap, new strategic site, etc.), just rerun `build_data.py` from the
+parent `DIVAST-Turbine/` workspace and copy the regenerated parquet +
+metadata into this repo. The app's selector picks up new configs
+automatically.
 
 ---
 
 ## Project context
 
 This tool is part of the Shannon Estuary tidal-energy assessment
-research (University of Galway, 2026), supervised by Dr Stephen Nash.
-
-Future public hosting: <https://github.com/eftekhari-alireza/eftekhari-alireza.github.io>
+research (University of Galway, 2026), supervised by Dr Stephen Nash
+(with Dr Michael Hartnett). The DIVAST 2D depth-integrated model
+(Falconer 1992) was run for a 5 × 3 turbine design grid; the analysis
+and figures live in `Final_Results/` (sections 4.1–4.6 of the paper).
 
 ---
 
