@@ -79,6 +79,49 @@ IMAX = meta["imax"]
 JMAX = meta["jmax"]
 CELL_AREA_KM2 = meta["cell_area_km2"]
 CONFIGS_AVAIL = meta["configs"]    # list of dicts
+ALL_LABELS = [c["label"] for c in CONFIGS_AVAIL]
+
+
+# --------------------------------------------------------------------------
+# URL STATE SHARING — read query params on load, sync session_state back
+# at the end of the script. Pattern: URL → session_state (first load only)
+# → widgets (via key=) → user changes → session_state → URL.
+# --------------------------------------------------------------------------
+qp = st.query_params
+
+def _qp_bool(key, default):
+    v = qp.get(key)
+    if v is None: return default
+    return str(v).lower() in ("1", "true", "yes")
+
+def _qp_int(key, default):
+    try: return int(qp.get(key, default))
+    except (TypeError, ValueError): return default
+
+# Map between full radio labels (what the widget expects) and short URL codes
+FIELD_TO_CODE = {
+    "Annual energy per turbine (MWh/yr)": "energy",
+    "Capacity factor (%)":                "cf",
+    "Peak velocity (m/s)":                "vel",
+}
+CODE_TO_FIELD = {v: k for k, v in FIELD_TO_CODE.items()}
+
+# First-load-only seeding of session_state from URL (or defaults)
+if "selected_set" not in st.session_state:
+    seeded = qp.get("set", "Set01")
+    st.session_state["selected_set"] = seeded if seeded in ALL_LABELS else "Set01"
+if "field_choice" not in st.session_state:
+    st.session_state["field_choice"] = CODE_TO_FIELD.get(
+        qp.get("field", "energy"), "Annual energy per turbine (MWh/yr)"
+    )
+if "highlight_top" not in st.session_state:
+    st.session_state["highlight_top"] = _qp_bool("top", False)
+if "exclude_shipping" not in st.session_state:
+    st.session_state["exclude_shipping"] = _qp_bool("excl_ship", False)
+if "sites_only" not in st.session_state:
+    st.session_state["sites_only"] = _qp_bool("sites_only", False)
+if "viable_only" not in st.session_state:
+    st.session_state["viable_only"] = _qp_bool("viable_only", False)
 
 
 # --------------------------------------------------------------------------
@@ -90,36 +133,30 @@ st.sidebar.caption("Tier 1 prototype  |  DIVAST 2D model output")
 # --- turbine selector ----
 st.sidebar.subheader("1. Turbine configuration")
 
-config_labels = [
-    f"{c['label']}  —  D = {c['D_m']} m,  Vr = {c['Vr_mps']} m/s"
-    for c in CONFIGS_AVAIL
-]
-default_idx = next(
-    (i for i, c in enumerate(CONFIGS_AVAIL) if c["label"] == "Set01"),
-    0,
-)
-selected_idx = st.sidebar.selectbox(
+def _fmt_set(lbl):
+    c = next(c for c in CONFIGS_AVAIL if c["label"] == lbl)
+    return f"{c['label']}  —  D = {c['D_m']} m,  Vr = {c['Vr_mps']} m/s"
+
+selected_label = st.sidebar.selectbox(
     "Select a turbine",
-    range(len(config_labels)),
-    format_func=lambda i: config_labels[i],
-    index=default_idx,
+    ALL_LABELS,
+    format_func=_fmt_set,
+    key="selected_set",
 )
-cfg = CONFIGS_AVAIL[selected_idx]
+cfg = next(c for c in CONFIGS_AVAIL if c["label"] == selected_label)
 LABEL = cfg["label"]
 
 # --- field to display on map ----
 st.sidebar.subheader("2. Map field")
 field_choice = st.sidebar.radio(
     "Show on map:",
-    ["Annual energy per turbine (MWh/yr)",
-     "Capacity factor (%)",
-     "Peak velocity (m/s)"],
-    index=0,
+    list(FIELD_TO_CODE.keys()),
+    key="field_choice",
 )
 TOP_N = 10
 highlight_top = st.sidebar.checkbox(
     f"Highlight top {TOP_N} cells",
-    value=False,
+    key="highlight_top",
     help=(
         f"Draws a red outline around the {TOP_N} cells with the highest "
         "value in the currently-selected field, within the visible "
@@ -133,10 +170,10 @@ highlight_top = st.sidebar.checkbox(
 # Anchorage exclusion removed as redundant with shipping exclusion.
 st.sidebar.subheader("3. Spatial filters")
 st.sidebar.caption("Estuary mask is always applied.")
-exclude_shipping  = st.sidebar.checkbox("Exclude shipping lane", value=False)
-sites_only        = st.sidebar.checkbox("Strategic sites only (Q/R/S/T)", value=False)
+exclude_shipping  = st.sidebar.checkbox("Exclude shipping lane", key="exclude_shipping")
+sites_only        = st.sidebar.checkbox("Strategic sites only (Q/R/S/T)", key="sites_only")
 viable_only       = st.sidebar.checkbox(
-    f"Class 3 viable cells only ({LABEL})", value=False,
+    f"Class 3 viable cells only ({LABEL})", key="viable_only",
 )
 
 # --- about / metadata ----
@@ -215,17 +252,26 @@ LAND_GRID = precompute_land_grid(len(df))    # signature arg just for cache key
 
 
 # --------------------------------------------------------------------------
-# CELL-INSPECTOR session state — initialised once to the highest-velocity
-# estuary cell.  The number_input widgets below the map write to these keys
-# via Streamlit's `key=` parameter, which is read back here on the next run.
+# CELL-INSPECTOR session state — initialised once. Priority order:
+#   1. URL params ?i=…&j=… (if both valid)
+#   2. Highest-peak-velocity cell in the estuary (fallback)
+# The number_input widgets below the map write to these keys via
+# Streamlit's `key=` parameter, which is read back here on the next run.
 # --------------------------------------------------------------------------
 if "inspect_i" not in st.session_state:
-    _pv_in_est = np.where(
-        df["in_estuary"].values, df["peak_vel_mps"].values, -1.0,
-    )
-    _best_idx = int(np.argmax(_pv_in_est))
-    st.session_state["inspect_i"] = int(df.iloc[_best_idx]["i"])
-    st.session_state["inspect_j"] = int(df.iloc[_best_idx]["j"])
+    qp_i = _qp_int("i", -1)
+    qp_j = _qp_int("j", -1)
+    if 0 <= qp_i < IMAX and 0 <= qp_j < JMAX:
+        st.session_state["inspect_i"] = qp_i
+        st.session_state["inspect_j"] = qp_j
+    else:
+        # Fallback: highest-velocity estuary cell
+        _pv_in_est = np.where(
+            df["in_estuary"].values, df["peak_vel_mps"].values, -1.0,
+        )
+        _best_idx = int(np.argmax(_pv_in_est))
+        st.session_state["inspect_i"] = int(df.iloc[_best_idx]["i"])
+        st.session_state["inspect_j"] = int(df.iloc[_best_idx]["j"])
 
 inspect_i = int(st.session_state["inspect_i"])
 inspect_j = int(st.session_state["inspect_j"])
@@ -263,7 +309,6 @@ n_visible = len(visible)
 viable_mask = visible[f"{LABEL}_viable"].values.astype(bool)
 n_class3 = int(viable_mask.sum())
 area_class3_km2 = n_class3 * CELL_AREA_KM2
-
 energy_arr = visible[f"{LABEL}_energy_mwh"].values
 cf_arr     = visible[f"{LABEL}_cf_pct"].values
 mean_energy = float(np.nanmean(energy_arr[viable_mask])) if n_class3 else 0.0
@@ -271,7 +316,6 @@ total_energy_gwh = float(np.nansum(energy_arr[viable_mask]) / 1000.0)
 mean_cf    = float(np.nanmean(cf_arr[viable_mask])) if n_class3 else 0.0
 
 c1, c2, c3, c4 = st.columns(4)
-
 c1.metric(
     "Class 3 viable cells",
     f"{n_class3:,}",
@@ -280,7 +324,6 @@ c1.metric(
         "velocity criteria are met for this turbine (D, Vᵣ)."
     ),
 )
-
 c2.metric(
     "Viable area",
     f"{area_class3_km2:.1f} km²",
@@ -291,7 +334,6 @@ c2.metric(
         "account for wake spacing or realistic farm packing."
     ),
 )
-
 c3.metric(
     "Mean energy / turbine",
     f"{mean_energy:.1f} MWh/yr",
@@ -308,7 +350,6 @@ c3.metric(
         "• Reflects one full year (365 days) of accumulated energy."
     ),
 )
-
 c4.metric(
     "Theoretical max (1 turbine/cell)",
     f"{total_energy_gwh:.1f} GWh/yr",
@@ -709,7 +750,6 @@ _export_df = df.loc[keep, _export_cols].rename(columns={
     "peak_vel_mps":        "peak_vel",
 })
 _csv_bytes = _export_df.to_csv(index=False).encode("utf-8")
-
 st.sidebar.download_button(
     label=f"📥 Download visible cells ({len(_export_df):,} rows)",
     data=_csv_bytes,
@@ -723,6 +763,24 @@ st.sidebar.download_button(
     ),
 )
 
+
+# --------------------------------------------------------------------------
+# URL STATE SYNC — write the current widget state back to the URL so the
+# page URL is shareable / bookmarkable. Runs near the end so all widgets
+# and click handlers have already updated session_state.
+# --------------------------------------------------------------------------
+st.query_params["set"]          = st.session_state["selected_set"]
+st.query_params["field"]        = FIELD_TO_CODE.get(
+    st.session_state["field_choice"], "energy"
+)
+st.query_params["top"]          = "1" if st.session_state["highlight_top"]   else "0"
+st.query_params["excl_ship"]    = "1" if st.session_state["exclude_shipping"] else "0"
+st.query_params["sites_only"]   = "1" if st.session_state["sites_only"]      else "0"
+st.query_params["viable_only"]  = "1" if st.session_state["viable_only"]     else "0"
+st.query_params["i"]            = str(int(st.session_state["inspect_i"]))
+st.query_params["j"]            = str(int(st.session_state["inspect_j"]))
+
+
 # --------------------------------------------------------------------------
 # FOOTER
 # --------------------------------------------------------------------------
@@ -732,5 +790,6 @@ st.caption(
     "(Falconer 1992, Lewis et al. 2021 standardized turbine power curve). "
     "Estuary mask: J = 50 boundary  ·  "
     "Cp = 0.40, ρ = 1025 kg/m³, cut-in = 0.30 × Vr. "
+    "💡 The page URL encodes your current view — copy it to share or bookmark. "
     f"Built {meta['build_timestamp_utc']}."
 )
