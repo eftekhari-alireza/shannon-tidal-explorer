@@ -46,6 +46,17 @@ What's in Tier 1 (everything in this folder):
 - Interactive map of the Shannon Estuary, one turbine config at a time
 - Three map fields: Annual energy, Capacity factor, Peak velocity
 - Live spatial filters (shipping lane, strategic sites, viable cells)
+- **Side-by-side comparison** of any two configs, OR a **difference map
+  (B − A)** with diverging colormap — directly visualises why one turbine
+  beats another at a given cell
+- **Depth-criterion sensitivity toggle** — switch between bEMEC (the
+  EMEC-baseline criterion adopted for §§4.1–4.5 of the paper) and rEMEC
+  (the relaxed variant used in §4.6's sensitivity test). Every number
+  in the app re-reads from the chosen criterion's columns
+- **"Best config at this cell" auto-suggest** in the cell inspector —
+  shows which of the 15 configs maximises annual energy and which
+  maximises capacity factor at the inspected cell, honouring the active
+  depth criterion
 - Cell inspector — click any cell to see all 15 configs at that location,
   or type the (i, j) coordinates manually
 - Top-10 best cells highlight (respects active spatial filters)
@@ -53,6 +64,9 @@ What's in Tier 1 (everything in this folder):
 - Cumulative-area-vs-threshold curve with interactive slider
 - 15-config comparison table for the visible region
 - CSV download of the visible cells (one click, in the sidebar)
+- **URL state sharing** — every sidebar choice (turbine, field, filters,
+  compare mode, depth criterion, inspect cell) is encoded in the page URL.
+  Copy and paste the URL to share the exact view with a collaborator
 - Always-on land underlay (sandy brown) + sea background (light blue)
 - Tooltips on every metric explaining methodology and caveats
 - Stable layout — switching fields/filters never shifts the map or colorbar
@@ -63,10 +77,8 @@ What's in Tier 1 (everything in this folder):
 
 Tier 2 is the bigger-ambition version. Items discussed but not built:
 
-- Side-by-side comparison of two turbine configs (or a difference map)
 - Multi-page app (separate methodology / about / glossary pages)
 - Custom packing-density slider for the resource estimate
-- URL state sharing (paste a link, open the same view)
 - PNG export with embedded caption metadata
 - Comparison strip against the SEAI 2005 baseline (0.915 TWh/yr)
 - Polygon-draw region select with custom statistics
@@ -74,6 +86,11 @@ Tier 2 is the bigger-ambition version. Items discussed but not built:
   to retain hourly velocity)
 - LCOE / economics calculator
 - Screenshot showcase / hero image for the README
+
+(Three items previously listed under Tier 2 — side-by-side comparison,
+URL state sharing, and depth-criterion sensitivity — were folded into
+Tier 1 because they fit the single-page architecture and have direct
+counterparts in the paper's analysis.)
 
 ---
 
@@ -112,31 +129,34 @@ The tool has two layers, kept deliberately separate so each can evolve
 without disturbing the other:
 
 ```
-   ┌────────────────────┐       ┌──────────────────────┐
-   │  Final_Results/    │       │  Shannon_Turbine_    │
-   │  _shared/          │──┐    │  Results_V2/         │
-   │   masks.py         │  │    │   Set01_*/SHANNON…   │
-   │   dat_loader.py    │  │    │   Set02_*/SHANNON…   │
-   │   turbine_configs  │  │    │   …                  │
-   └────────────────────┘  │    └──────────────────────┘
-                           │              │
-                           ▼              ▼
-                  ┌──────────────────────────┐
-                  │  build_data.py            │   one-off (15 s)
-                  └──────────────────────────┘
-                           │
-                           ▼
-                  ┌──────────────────────────┐
-                  │  data/                    │
-                  │   shannon_grid.parquet    │   ≈ 0.7 MB, 110,019 rows
-                  │   metadata.json           │
-                  └──────────────────────────┘
-                           │
-                           ▼
-                  ┌──────────────────────────┐
-                  │  app.py                   │   live, interactive
-                  │   (Streamlit + Plotly)    │
-                  └──────────────────────────┘
+   ┌────────────────────┐    ┌──────────────────────┐  ┌──────────────────────┐
+   │  Final_Results/    │    │  Shannon_Turbine_    │  │  Shannon_Turbine_    │
+   │  _shared/          │─┐  │  Results_V2/ (bEMEC) │  │  Results_V1/ (rEMEC) │
+   │   masks.py         │ │  │   Set01_*/SHANNON…   │  │   Set01_*/SHANNON…   │
+   │   dat_loader.py    │ │  │   …                  │  │   …                  │
+   │   turbine_configs  │ │  │   Set15_*/SHANNON…   │  │   Set15_*/SHANNON…   │
+   └────────────────────┘ │  └──────────────────────┘  └──────────────────────┘
+                          │            │                          │
+                          ▼            ▼                          ▼
+                  ┌──────────────────────────────────────────────────┐
+                  │  build_data.py                  one-off (~30 s)  │
+                  │  loads BOTH bEMEC and rEMEC datasets             │
+                  └──────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+                  ┌──────────────────────────────────────────────────┐
+                  │  data/                                            │
+                  │   shannon_grid.parquet     ≈ 1.1 MB, 110,019 rows │
+                  │                              105 columns          │
+                  │                              (60 bEMEC + 45 rEMEC)│
+                  │   metadata.json                                   │
+                  └──────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+                  ┌──────────────────────────────────────────────────┐
+                  │  app.py                  live, interactive       │
+                  │   (Streamlit + Plotly)                            │
+                  └──────────────────────────────────────────────────┘
 ```
 
 **Why the two layers?** Re-parsing the F15.3 fixed-width `.dat` files on
@@ -153,8 +173,9 @@ self-contained and runnable without any of the underlying `.dat` files.
 
 ## Data layer — `build_data.py`
 
-A one-off script that reads the 15 SHANNONMAXVEL.dat files plus the
-three masks, and writes one Parquet file at `data/shannon_grid.parquet`.
+A one-off script that reads **30 SHANNONMAXVEL.dat files** (15 bEMEC +
+15 rEMEC) plus the three masks, and writes one Parquet file at
+`data/shannon_grid.parquet`.
 
 ### Schema (wide format, one row per DIVAST grid cell)
 
@@ -170,12 +191,20 @@ three masks, and writes one Parquet file at `data/shannon_grid.parquet`.
 | | `site_q/r/s/t` | bool | individual strategic-site flags |
 | Set-independent | `peak_vel_mps` | float32 | DIVAST peak velocity, capped at 3.0 m/s |
 | | `avg_pd_kwm2` | float32 | time-averaged available power density (kW/m²) |
-| Per-config × 15 | `{Set##}_viable` | bool | Class 3 (depth + velocity criteria met) |
-| | `{Set##}_energy_mwh` | float32 | annual energy with depth+velocity constraint |
-| | `{Set##}_cf_pct` | float32 | capacity factor in percent |
+| Per-config × 15 (bEMEC) | `{Set##}_viable` | bool | Class 3 under bEMEC (the EMEC-baseline criterion of §3.3 in the paper) |
+| | `{Set##}_energy_mwh` | float32 | annual energy with bEMEC depth+velocity constraint |
+| | `{Set##}_cf_pct` | float32 | capacity factor (%) under bEMEC |
+| Per-config × 15 (rEMEC) | `{Set##}_viable_rEMEC` | bool | Class 3 under rEMEC (relaxed criterion, §4.6 sensitivity test) |
+| | `{Set##}_energy_mwh_rEMEC` | float32 | annual energy under rEMEC |
+| | `{Set##}_cf_pct_rEMEC` | float32 | capacity factor (%) under rEMEC |
 
-Total: 54 columns × 110,019 rows × float32/bool ≈ ~0.7 MB on disk
-(snappy compression). Easy to commit to Git.
+Total: 105 columns × 110,019 rows × float32/bool ≈ ~1.1 MB on disk
+(snappy compression). Still small enough to commit to Git.
+
+The bEMEC columns alone (60 cols) are sufficient for §§4.1–4.5 of the
+paper. The rEMEC columns (the additional 45) power the depth-criterion
+sensitivity toggle in the sidebar and let the app reproduce the §4.6
+analysis interactively.
 
 A small `metadata.json` sidecar carries grid constants (IMAX, JMAX,
 cell area), per-config rated power, and a build timestamp.
@@ -217,6 +246,20 @@ main area with the visualisations.
 1. **Turbine configuration** — dropdown selector for one of 15 configs
    (Set01–Set15). The 5 × 3 grid is: 5 rotor diameters
    (3, 5, 10, 15, 20 m) × 3 rated velocities (1.5, 2.0, 2.5 m/s).
+   Default = **Set01** (D = 20 m, Vᵣ = 2.5 m/s).
+
+   Two add-on controls appear below the selector:
+   - *Compare with another turbine* — when ticked, a second selectbox and
+     a "Side-by-side / Difference (B − A)" radio appear. The map area
+     switches to either two side-by-side maps with shared color scale,
+     or a single difference map using a diverging RdBu colormap. Cell
+     inspector, threshold curve, comparison table and CSV export stay
+     tied to the primary turbine (A).
+   - *Depth criterion* (only shown when the parquet contains rEMEC
+     columns) — radio with **bEMEC** (primary, §§4.1–4.5) and **rEMEC**
+     (relaxed, §4.6 sensitivity). Switching this re-reads every number
+     in the app from the chosen criterion's columns. Header subtitle
+     shows which criterion is active.
 
 2. **Map field** — radio button for the field to colour the map by:
    Annual energy (MWh/yr), Capacity factor (%), or Peak velocity (m/s).
@@ -265,11 +308,18 @@ main area with the visualisations.
    directly on the map (requires `streamlit-plotly-events`). Shows:
    - 4 context metrics for that cell: peak velocity, average power
      density, in-estuary flag, in-shipping-lane flag
+   - **"Best config at this cell" auto-suggest** — two green callout
+     boxes with the per-cell argmax over the 15 configs: best by
+     annual energy (with MWh/yr) and best by capacity factor (with %).
+     Honours the active depth criterion (bEMEC or rEMEC). If no config
+     is Class 3 viable at the cell, a yellow warning explains and
+     suggests switching the criterion or picking a deeper cell.
    - 15-row table — for each turbine config, the cell's viability
-     flag, annual energy (MWh/yr), and capacity factor (%)
+     flag, annual energy (MWh/yr), and capacity factor (%) under the
+     active criterion
 
    Default cell on first load: the highest-peak-velocity cell in the
-   estuary.
+   estuary, OR — if the URL contains `?i=…&j=…` — those coords.
 
 5. **Cumulative area vs. threshold (expandable)** — radio to pick
    which field to threshold on (velocity / energy / CF), a slider for
@@ -293,12 +343,23 @@ main area with the visualisations.
 
 ### Interaction notes
 
+- **URL state sharing**: every meaningful sidebar choice is written to
+  the page URL — turbine selection, map field, filters, compare mode +
+  Turbine B, compare view, depth criterion, inspect cell. Copy the URL
+  in your browser bar and paste it elsewhere to reproduce the exact
+  view. Pasting a URL with no params loads the default state.
 - **Click-to-inspect**: requires `streamlit-plotly-events`. Without it,
   the app falls back to typed (i, j) coordinates only, and shows a tip
-  in the caption explaining how to enable clicking.
+  in the caption explaining how to enable clicking. In compare mode,
+  the click handler is attached only to the primary (A) map.
 - **Top-N selection**: respects all spatial filters. If you tick
   "Strategic sites only," the top 10 are picked from inside the sites,
-  not the whole estuary.
+  not the whole estuary. (Disabled in compare mode for clarity.)
+- **Compare mode**: when active, the map area is replaced by either
+  two side-by-side maps (shared colour scale) or a single difference
+  map (B − A, diverging RdBu colormap). Difference of "Peak velocity"
+  is identically zero (peak velocity is set-independent) — a notice
+  appears explaining this.
 - **Map orientation**: north is at the top. DIVAST row 0 corresponds to
   the high-Y northern boundary; the y-axis is reversed accordingly.
 - **Inspect-cell × marker**: stays put when filters change, so you
@@ -357,47 +418,6 @@ estuary mask all propagate automatically.
 The tool deliberately holds **no analysis logic of its own** — it is a
 pure visualisation layer over the paper's authoritative numbers.
 
----
-
-## Honest caveats and limitations
-
-A few things worth knowing before drawing conclusions from the tool.
-
-**Annual energy is from a 372-day simulation** — `TIMESM = 8928 hours`
-in the DIVAST input file. That's ~1.018 years. The reported MWh/yr is
-therefore ~1.8% above a strict 365-day annual estimate. The tooltip on
-the *Mean energy / turbine* metric mentions "one full year (365 days)"
-as a rounded reference; the underlying number is closer to 372 days.
-
-**"Theoretical max (1 turbine/cell)" is an upper bound.** The metric
-sums per-cell annual energy assuming exactly one turbine per
-189 m × 189 m cell. That's roughly OK for D = 20 m turbines (cell
-spacing ≈ 9.5 D, close to typical 5–10 D wake spacing) but heavily
-underestimates packing density for D = 3–5 m turbines (cell spacing
-38–63 D, much more sparse than realistic). Use this number as a
-**relative comparator across configs**, not as an absolute resource
-estimate. The tooltip on this metric spells this out.
-
-**Capacity factor uses a fixed Cp = 0.40 and ρ = 1025 kg/m³.** Real
-turbines have Cp curves that vary with tip-speed ratio and Reynolds
-number. The fixed-Cp assumption is the standard Lewis et al. (2021)
-simplification and is internally consistent with the paper.
-
-**Peak velocity is capped at 3.0 m/s** by Shannon.f (this caps a
-known model artefact in some narrow-channel cells). The tool just
-reads the capped values; you'll see 3.0 m/s as the maximum in the
-peak-velocity field.
-
-**No farm-array effects.** Wakes between adjacent turbines, blockage,
-and array efficiency factors are not modelled anywhere in this
-visualisation pipeline. Resource numbers are single-turbine, isolated.
-(For the array-aware fleet-sizing analysis with three packing scenarios,
-see the paper's §4.6.)
-
-**Cell coordinates are DIVAST grid indices**, not lat/lon or projected
-coords. The (x, y) metres in the parquet are arbitrary domain-relative
-coordinates, not real-world. Useful for relative positioning on the
-map; not useful for overlaying on a GIS.
 
 ---
 
@@ -406,13 +426,15 @@ map; not useful for overlaying on a GIS.
 ```
 shannon-tidal-explorer/
 ├── README.md             ← this file (canonical)
+├── RUNBOOK.md            ← operational playbook for future updates
+├── SKILL.md              ← architectural skill file (loaded by Claude when editing)
 ├── requirements.txt      ← Python deps
-├── app.py                ← Streamlit app (~700 lines)
+├── app.py                ← Streamlit app (~1,000 lines, single file)
 ├── .gitignore
 ├── .gitattributes
 └── data/
-    ├── shannon_grid.parquet     ← compact wide-format table (~0.7 MB)
-    └── metadata.json            ← grid + per-config metadata
+    ├── shannon_grid.parquet     ← compact wide-format table (~1.1 MB)
+    └── metadata.json            ← grid + per-config metadata (incl. rEMEC counts)
 ```
 
 `build_data.py` is **not** in this public repo. It lives in the parent
@@ -441,10 +463,8 @@ In rough priority order, things to do next if/when there's time:
 
 - Add a **screenshot to the README** as a hero image (currently
   text-only).
-- **Side-by-side comparison view** (Tier 2 marquee feature).
 - **Methodology page** explaining DIVAST, Class 3, cut-in, Lewis 2021,
   etc., as a separate Streamlit page.
-- **URL state encoding** so views are shareable.
 - **Custom packing-density slider** for the resource estimate
   (could expose the three packing scenarios from §4.6 of the paper).
 - **SEAI 2005 baseline reference card** in the metric strip.
