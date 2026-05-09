@@ -91,11 +91,11 @@ st.sidebar.caption("Tier 1 prototype  |  DIVAST 2D model output")
 st.sidebar.subheader("1. Turbine configuration")
 
 config_labels = [
-    f"{c['label']}  —  D = {c['D_m']} m,  $V_r$ = {c['Vr_mps']} m/s"
+    f"{c['label']}  —  D = {c['D_m']} m,  Vr = {c['Vr_mps']} m/s"
     for c in CONFIGS_AVAIL
 ]
 default_idx = next(
-    (i for i, c in enumerate(CONFIGS_AVAIL) if c["label"] == "Set05"),
+    (i for i, c in enumerate(CONFIGS_AVAIL) if c["label"] == "Set01"),
     0,
 )
 selected_idx = st.sidebar.selectbox(
@@ -251,7 +251,7 @@ grid, fld_title, hover_fmt, cmap, zmin, zmax = compute_display_grid(
 st.title("Shannon Tidal Resource Explorer")
 st.markdown(
     f"**{LABEL}** · D = **{cfg['D_m']} m** · "
-    f"$V_r$ = **{cfg['Vr_mps']} m/s** · "
+    f"Vr = **{cfg['Vr_mps']} m/s** · "
     f"Rated power = **{cfg['Pr_kW']:.1f} kW**"
 )
 
@@ -731,6 +731,6 @@ st.caption(
     "Data: DIVAST 2D depth-integrated hydrodynamic model "
     "(Falconer 1992, Lewis et al. 2021 standardized turbine power curve). "
     "Estuary mask: J = 50 boundary  ·  "
-    "Cp = 0.40, ρ = 1025 kg/m³, cut-in = 0.30 × $V_r$. "
+    "Cp = 0.40, ρ = 1025 kg/m³, cut-in = 0.30 × Vr. "
     f"Built {meta['build_timestamp_utc']}."
 )
