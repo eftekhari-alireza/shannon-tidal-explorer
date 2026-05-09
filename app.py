@@ -122,6 +122,16 @@ if "sites_only" not in st.session_state:
     st.session_state["sites_only"] = _qp_bool("sites_only", False)
 if "viable_only" not in st.session_state:
     st.session_state["viable_only"] = _qp_bool("viable_only", False)
+if "compare_mode" not in st.session_state:
+    st.session_state["compare_mode"] = _qp_bool("cmp", False)
+if "selected_set_b" not in st.session_state:
+    seeded_b = qp.get("setB", "Set12")
+    st.session_state["selected_set_b"] = seeded_b if seeded_b in ALL_LABELS else "Set12"
+if "cmp_view" not in st.session_state:
+    cmp_default = qp.get("cmpmode", "sbs")
+    st.session_state["cmp_view"] = (
+        "Side-by-side" if cmp_default == "sbs" else "Difference (B − A)"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -145,6 +155,37 @@ selected_label = st.sidebar.selectbox(
 )
 cfg = next(c for c in CONFIGS_AVAIL if c["label"] == selected_label)
 LABEL = cfg["label"]
+
+# --- compare mode (NEW) ----
+compare_mode = st.sidebar.checkbox(
+    "Compare with another turbine",
+    key="compare_mode",
+    help=(
+        "Show a second turbine alongside the primary one (side-by-side), "
+        "OR a difference map (B − A) using a diverging colormap. "
+        "Cell inspector, threshold curve, comparison table and CSV export "
+        "below stay tied to the primary turbine (A)."
+    ),
+)
+if compare_mode:
+    selected_label_b = st.sidebar.selectbox(
+        "Compare against (Turbine B):",
+        ALL_LABELS,
+        format_func=_fmt_set,
+        key="selected_set_b",
+    )
+    cmp_view = st.sidebar.radio(
+        "View:",
+        ["Side-by-side", "Difference (B − A)"],
+        key="cmp_view",
+        horizontal=True,
+    )
+    cfg_b = next(c for c in CONFIGS_AVAIL if c["label"] == selected_label_b)
+    LABEL_B = cfg_b["label"]
+else:
+    cfg_b = None
+    LABEL_B = None
+    cmp_view = None
 
 # --- field to display on map ----
 st.sidebar.subheader("2. Map field")
@@ -375,158 +416,313 @@ c4.metric(
 # --------------------------------------------------------------------------
 # PLOTLY HEATMAP
 # --------------------------------------------------------------------------
-st.subheader(f"{fld_title}  —  {LABEL}")
+if not compare_mode:
+    st.subheader(f"{fld_title}  —  {LABEL}")
 
-# Layout constants — fixed so switching fields/filters doesn't shift the map.
-FIG_HEIGHT       = 520
-RIGHT_MARGIN     = 80     # reserves space for the colorbar (no title) +
-                          # tick labels. With no field-name title, this is
-                          # constant across all 3 fields.
-LAND_COLOR       = "#8b6f47"   # darker, earthier brown
-SEA_COLOR        = "#bcd6e6"   # light sea blue
+    # Layout constants — fixed so switching fields/filters doesn't shift the map.
+    FIG_HEIGHT       = 520
+    RIGHT_MARGIN     = 80     # reserves space for the colorbar (no title) +
+                              # tick labels. With no field-name title, this is
+                              # constant across all 3 fields.
+    LAND_COLOR       = "#8b6f47"   # darker, earthier brown
+    SEA_COLOR        = "#bcd6e6"   # light sea blue
 
-fig = go.Figure()
+    fig = go.Figure()
 
-# Layer 1 — LAND (always visible, brown). Water cells are NaN so the sea-blue
-# plot background shows through.
-if LAND_GRID is not None:
-    fig.add_trace(go.Heatmap(
-        z=LAND_GRID,
-        colorscale=[[0.0, LAND_COLOR], [1.0, LAND_COLOR]],
-        showscale=False,
-        hoverinfo="skip",
-        zmin=0, zmax=1,
-        zsmooth=False,
-    ))
-
-# Layer 2 — DATA (filtered, with colorbar). NaN cells are transparent so the
-# land+sea underlay shows through wherever the filter excludes the cell.
-fig.add_trace(go.Heatmap(
-    z=grid,
-    colorscale=cmap,
-    zmin=zmin, zmax=zmax,
-    hoverongaps=False,
-    connectgaps=False,
-    zsmooth=False,
-    colorbar=dict(
-        # No title here — the subheader above the map already says
-        # "{Field} — {Set##}". A title on the colorbar was the thing
-        # making the layout shift between fields (different titles have
-        # different widths, which pushed the plot area around).
-        title=dict(text=""),
-        tickfont=dict(color="black", size=10),
-        thickness=14,
-        len=0.85,
-        x=1.01, xanchor="left",
-        y=0.5,  yanchor="middle",
-        outlinewidth=0,
-    ),
-    hovertemplate=(
-        "i = %{y}, j = %{x}<br>"
-        f"{fld_title}: %{{z:{hover_fmt[1:]}}}<extra></extra>"
-    ),
-))
-
-# Layer 3 — TOP-N highlight markers (red outlined circles), if enabled.
-if highlight_top:
-    sort_col = (
-        f"{LABEL}_energy_mwh" if field_choice.startswith("Annual energy") else
-        f"{LABEL}_cf_pct"     if field_choice.startswith("Capacity factor") else
-        "peak_vel_mps"
-    )
-    visible_only = df[keep].copy()
-    if len(visible_only) >= 1:
-        top_cells = visible_only.nlargest(TOP_N, sort_col)
-        fig.add_trace(go.Scatter(
-            x=top_cells["j"].values,
-            y=top_cells["i"].values,
-            mode="markers",
-            marker=dict(
-                symbol="circle-open",
-                size=12,
-                color="rgba(220,40,40,1)",
-                line=dict(width=2.5, color="rgba(220,40,40,1)"),
-            ),
-            customdata=top_cells[sort_col].values,
-            showlegend=False,
-            hovertemplate=(
-                f"Top {TOP_N} cell<br>"
-                "i = %{y}, j = %{x}<br>"
-                f"{fld_title}: %{{customdata:{hover_fmt[1:]}}}<extra></extra>"
-            ),
+    # Layer 1 — LAND (always visible, brown). Water cells are NaN so the sea-blue
+    # plot background shows through.
+    if LAND_GRID is not None:
+        fig.add_trace(go.Heatmap(
+            z=LAND_GRID,
+            colorscale=[[0.0, LAND_COLOR], [1.0, LAND_COLOR]],
+            showscale=False,
+            hoverinfo="skip",
+            zmin=0, zmax=1,
+            zsmooth=False,
         ))
 
-# Layer 4 — INSPECT marker (white-rim X at the user-selected cell).
-fig.add_trace(go.Scatter(
-    x=[inspect_j], y=[inspect_i],
-    mode="markers",
-    marker=dict(
-        symbol="x",
-        size=16,
-        color="white",
-        line=dict(width=3, color="black"),
-    ),
-    showlegend=False,
-    hovertemplate=f"Inspect cell<br>i = {inspect_i}, j = {inspect_j}<extra></extra>",
-))
+    # Layer 2 — DATA (filtered, with colorbar). NaN cells are transparent so the
+    # land+sea underlay shows through wherever the filter excludes the cell.
+    fig.add_trace(go.Heatmap(
+        z=grid,
+        colorscale=cmap,
+        zmin=zmin, zmax=zmax,
+        hoverongaps=False,
+        connectgaps=False,
+        zsmooth=False,
+        colorbar=dict(
+            # No title here — the subheader above the map already says
+            # "{Field} — {Set##}". A title on the colorbar was the thing
+            # making the layout shift between fields (different titles have
+            # different widths, which pushed the plot area around).
+            title=dict(text=""),
+            tickfont=dict(color="black", size=10),
+            thickness=14,
+            len=0.85,
+            x=1.01, xanchor="left",
+            y=0.5,  yanchor="middle",
+            outlinewidth=0,
+        ),
+        hovertemplate=(
+            "i = %{y}, j = %{x}<br>"
+            f"{fld_title}: %{{z:{hover_fmt[1:]}}}<extra></extra>"
+        ),
+    ))
 
-fig.update_layout(
-    height=FIG_HEIGHT,
-    autosize=True,                              # fill container width as before
-    margin=dict(l=10, r=RIGHT_MARGIN, t=10, b=10),
-    plot_bgcolor=SEA_COLOR,
-    paper_bgcolor="white",
-)
-fig.update_xaxes(
-    showgrid=False, showticklabels=False, zeroline=False,
-    range=[0, JMAX - 1],          # FIXED data range — never auto-scales
-    constrain="domain",
-)
-fig.update_yaxes(
-    showgrid=False, showticklabels=False, zeroline=False,
-    range=[IMAX - 1, 0],          # FIXED + reversed (high i at bottom = south at bottom)
-    scaleanchor="x", scaleratio=1,
-    constrain="domain",
-)
+    # Layer 3 — TOP-N highlight markers (red outlined circles), if enabled.
+    if highlight_top:
+        sort_col = (
+            f"{LABEL}_energy_mwh" if field_choice.startswith("Annual energy") else
+            f"{LABEL}_cf_pct"     if field_choice.startswith("Capacity factor") else
+            "peak_vel_mps"
+        )
+        visible_only = df[keep].copy()
+        if len(visible_only) >= 1:
+            top_cells = visible_only.nlargest(TOP_N, sort_col)
+            fig.add_trace(go.Scatter(
+                x=top_cells["j"].values,
+                y=top_cells["i"].values,
+                mode="markers",
+                marker=dict(
+                    symbol="circle-open",
+                    size=12,
+                    color="rgba(220,40,40,1)",
+                    line=dict(width=2.5, color="rgba(220,40,40,1)"),
+                ),
+                customdata=top_cells[sort_col].values,
+                showlegend=False,
+                hovertemplate=(
+                    f"Top {TOP_N} cell<br>"
+                    "i = %{y}, j = %{x}<br>"
+                    f"{fld_title}: %{{customdata:{hover_fmt[1:]}}}<extra></extra>"
+                ),
+            ))
 
-if HAS_PLOTLY_EVENTS:
-    # Click-to-inspect: any single-click on the map updates the inspector cell.
-    # Width is left to streamlit-plotly-events' default (fills the container);
-    # only height is pinned. The colorbar has no title (see above), so the
-    # plot area is identical for every field regardless of width.
-    selected = plotly_events(
-        fig,
-        click_event=True,
-        hover_event=False,
-        select_event=False,
-        override_height=FIG_HEIGHT + 10,
-        key="map_click",
+    # Layer 4 — INSPECT marker (white-rim X at the user-selected cell).
+    fig.add_trace(go.Scatter(
+        x=[inspect_j], y=[inspect_i],
+        mode="markers",
+        marker=dict(
+            symbol="x",
+            size=16,
+            color="white",
+            line=dict(width=3, color="black"),
+        ),
+        showlegend=False,
+        hovertemplate=f"Inspect cell<br>i = {inspect_i}, j = {inspect_j}<extra></extra>",
+    ))
+
+    fig.update_layout(
+        height=FIG_HEIGHT,
+        autosize=True,                              # fill container width as before
+        margin=dict(l=10, r=RIGHT_MARGIN, t=10, b=10),
+        plot_bgcolor=SEA_COLOR,
+        paper_bgcolor="white",
     )
-    if selected:
-        pt = selected[0]
-        try:
-            new_j = int(round(float(pt.get("x"))))
-            new_i = int(round(float(pt.get("y"))))
-            new_i = max(0, min(IMAX - 1, new_i))
-            new_j = max(0, min(JMAX - 1, new_j))
-            if new_i != inspect_i or new_j != inspect_j:
-                st.session_state["inspect_i"] = new_i
-                st.session_state["inspect_j"] = new_j
-                st.rerun()
-        except (TypeError, ValueError):
-            pass    # ignore malformed click payloads
-    st.caption(
-        "💡 Click any cell on the map to load it into the Cell inspector below."
+    fig.update_xaxes(
+        showgrid=False, showticklabels=False, zeroline=False,
+        range=[0, JMAX - 1],          # FIXED data range — never auto-scales
+        constrain="domain",
     )
+    fig.update_yaxes(
+        showgrid=False, showticklabels=False, zeroline=False,
+        range=[IMAX - 1, 0],          # FIXED + reversed (high i at bottom = south at bottom)
+        scaleanchor="x", scaleratio=1,
+        constrain="domain",
+    )
+
+    if HAS_PLOTLY_EVENTS:
+        # Click-to-inspect: any single-click on the map updates the inspector cell.
+        # Width is left to streamlit-plotly-events' default (fills the container);
+        # only height is pinned. The colorbar has no title (see above), so the
+        # plot area is identical for every field regardless of width.
+        selected = plotly_events(
+            fig,
+            click_event=True,
+            hover_event=False,
+            select_event=False,
+            override_height=FIG_HEIGHT + 10,
+            key="map_click",
+        )
+        if selected:
+            pt = selected[0]
+            try:
+                new_j = int(round(float(pt.get("x"))))
+                new_i = int(round(float(pt.get("y"))))
+                new_i = max(0, min(IMAX - 1, new_i))
+                new_j = max(0, min(JMAX - 1, new_j))
+                if new_i != inspect_i or new_j != inspect_j:
+                    st.session_state["inspect_i"] = new_i
+                    st.session_state["inspect_j"] = new_j
+                    st.rerun()
+            except (TypeError, ValueError):
+                pass    # ignore malformed click payloads
+        st.caption(
+            "💡 Click any cell on the map to load it into the Cell inspector below."
+        )
+    else:
+        # Fallback: no click events. Container-filled width as before.
+        st.plotly_chart(
+            fig, use_container_width=True, config={"displaylogo": False},
+        )
+        st.caption(
+            "💡 Tip: `pip install streamlit-plotly-events` to enable "
+            "click-to-inspect on the map."
+        )
+
 else:
-    # Fallback: no click events. Container-filled width as before.
-    st.plotly_chart(
-        fig, use_container_width=True, config={"displaylogo": False},
+    # ----------------------------------------------------------------------
+    # COMPARE MODE — side-by-side (two maps) OR difference map (B − A)
+    # ----------------------------------------------------------------------
+    grid_b, _, _, _, zmin_b, zmax_b = compute_display_grid(
+        df, cfg_b, field_choice, keep,
+    )
+
+    st.subheader(
+        f"Compare: {LABEL} (A) vs {LABEL_B} (B)  —  {fld_title}"
     )
     st.caption(
-        "💡 Tip: `pip install streamlit-plotly-events` to enable "
-        "click-to-inspect on the map."
+        f"**A:** {LABEL}  D = {cfg['D_m']} m, Vr = {cfg['Vr_mps']} m/s, "
+        f"Pr = {cfg['Pr_kW']:.0f} kW        "
+        f"**B:** {LABEL_B}  D = {cfg_b['D_m']} m, Vr = {cfg_b['Vr_mps']} m/s, "
+        f"Pr = {cfg_b['Pr_kW']:.0f} kW"
     )
+
+    if cmp_view == "Side-by-side":
+        # Use a SHARED zmin/zmax across both maps so colours are comparable
+        finite_a = grid[np.isfinite(grid)]
+        finite_b = grid_b[np.isfinite(grid_b)]
+        if finite_a.size and finite_b.size:
+            z_lo = float(min(finite_a.min(), finite_b.min()))
+            z_hi = float(max(finite_a.max(), finite_b.max()))
+        else:
+            z_lo, z_hi = 0.0, 1.0
+        if z_hi == z_lo:
+            z_hi = z_lo + 1.0
+
+        col_a, col_b = st.columns(2, gap="small")
+        for col, this_grid, this_label in [
+            (col_a, grid,   f"{LABEL} (A)"),
+            (col_b, grid_b, f"{LABEL_B} (B)"),
+        ]:
+            with col:
+                st.markdown(f"**{this_label}**")
+                fig = go.Figure()
+                if LAND_GRID is not None:
+                    fig.add_trace(go.Heatmap(
+                        z=LAND_GRID,
+                        colorscale=[[0.0, LAND_COLOR], [1.0, LAND_COLOR]],
+                        showscale=False, hoverinfo="skip",
+                        zmin=0, zmax=1, zsmooth=False,
+                    ))
+                fig.add_trace(go.Heatmap(
+                    z=this_grid,
+                    colorscale=cmap,
+                    zmin=z_lo, zmax=z_hi,
+                    hoverongaps=False, connectgaps=False, zsmooth=False,
+                    colorbar=dict(
+                        title=dict(text=""),
+                        tickfont=dict(color="black", size=9),
+                        thickness=12, len=0.85,
+                        x=1.01, xanchor="left",
+                        y=0.5,  yanchor="middle",
+                        outlinewidth=0,
+                    ),
+                    hovertemplate=(
+                        "i = %{y}, j = %{x}<br>"
+                        f"{fld_title}: %{{z:{hover_fmt[1:]}}}<extra></extra>"
+                    ),
+                ))
+                fig.update_layout(
+                    height=FIG_HEIGHT,
+                    autosize=True,
+                    margin=dict(l=10, r=RIGHT_MARGIN, t=10, b=10),
+                    plot_bgcolor=SEA_COLOR,
+                    paper_bgcolor="white",
+                )
+                fig.update_xaxes(
+                    showgrid=False, showticklabels=False, zeroline=False,
+                    range=[0, JMAX - 1], constrain="domain",
+                )
+                fig.update_yaxes(
+                    showgrid=False, showticklabels=False, zeroline=False,
+                    range=[IMAX - 1, 0],
+                    scaleanchor="x", scaleratio=1, constrain="domain",
+                )
+                st.plotly_chart(fig, use_container_width=True,
+                                config={"displaylogo": False})
+
+        st.caption(
+            "💡 Both maps share the same colour scale for visual "
+            "comparability. The cell inspector, threshold curve, comparison "
+            "table, and CSV export below remain tied to Turbine A."
+        )
+
+    else:  # Difference (B − A)
+        if field_choice.startswith("Peak"):
+            st.info(
+                "Peak velocity is set-independent — every cell shows zero "
+                "difference. Switch the map field to Annual energy or "
+                "Capacity factor to see meaningful differences between the "
+                "two turbines."
+            )
+        diff_grid = grid_b - grid
+        finite = diff_grid[np.isfinite(diff_grid)]
+        abs_max = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
+        if abs_max == 0:
+            abs_max = 1.0
+
+        fig_diff = go.Figure()
+        if LAND_GRID is not None:
+            fig_diff.add_trace(go.Heatmap(
+                z=LAND_GRID,
+                colorscale=[[0.0, LAND_COLOR], [1.0, LAND_COLOR]],
+                showscale=False, hoverinfo="skip",
+                zmin=0, zmax=1, zsmooth=False,
+            ))
+        fig_diff.add_trace(go.Heatmap(
+            z=diff_grid,
+            colorscale="RdBu_r",
+            zmin=-abs_max, zmax=abs_max, zmid=0,
+            hoverongaps=False, connectgaps=False, zsmooth=False,
+            colorbar=dict(
+                title=dict(text=""),
+                tickfont=dict(color="black", size=10),
+                thickness=14, len=0.85,
+                x=1.01, xanchor="left",
+                y=0.5,  yanchor="middle",
+                outlinewidth=0,
+            ),
+            hovertemplate=(
+                "i = %{y}, j = %{x}<br>"
+                f"Δ {fld_title}: %{{z:{hover_fmt[1:]}}}<extra></extra>"
+            ),
+        ))
+        fig_diff.update_layout(
+            height=FIG_HEIGHT,
+            autosize=True,
+            margin=dict(l=10, r=RIGHT_MARGIN, t=10, b=10),
+            plot_bgcolor=SEA_COLOR,
+            paper_bgcolor="white",
+        )
+        fig_diff.update_xaxes(
+            showgrid=False, showticklabels=False, zeroline=False,
+            range=[0, JMAX - 1], constrain="domain",
+        )
+        fig_diff.update_yaxes(
+            showgrid=False, showticklabels=False, zeroline=False,
+            range=[IMAX - 1, 0],
+            scaleanchor="x", scaleratio=1, constrain="domain",
+        )
+        st.plotly_chart(fig_diff, use_container_width=True,
+                        config={"displaylogo": False})
+        st.caption(
+            f"💡 Red = {LABEL_B} (B) higher than {LABEL} (A). "
+            f"Blue = {LABEL_B} (B) lower. White = no difference. "
+            f"Cells where one or both configs are non-viable, or that fall "
+            f"outside the visible filter, appear as gaps."
+        )
+
 
 
 # --------------------------------------------------------------------------
@@ -779,6 +975,12 @@ st.query_params["sites_only"]   = "1" if st.session_state["sites_only"]      els
 st.query_params["viable_only"]  = "1" if st.session_state["viable_only"]     else "0"
 st.query_params["i"]            = str(int(st.session_state["inspect_i"]))
 st.query_params["j"]            = str(int(st.session_state["inspect_j"]))
+st.query_params["cmp"]          = "1" if st.session_state["compare_mode"] else "0"
+if st.session_state["compare_mode"]:
+    st.query_params["setB"]     = st.session_state["selected_set_b"]
+    st.query_params["cmpmode"]  = (
+        "sbs" if st.session_state["cmp_view"] == "Side-by-side" else "diff"
+    )
 
 
 # --------------------------------------------------------------------------
