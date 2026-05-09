@@ -414,18 +414,18 @@ c4.metric(
 
 
 # --------------------------------------------------------------------------
-# PLOTLY HEATMAP
+# PLOTLY HEATMAP — layout constants apply to BOTH single-map and compare-mode
+# branches, so they live OUTSIDE the if/else.
 # --------------------------------------------------------------------------
+FIG_HEIGHT       = 520
+RIGHT_MARGIN     = 80     # reserves space for the colorbar (no title) +
+                          # tick labels. With no field-name title, this is
+                          # constant across all 3 fields.
+LAND_COLOR       = "#8b6f47"   # darker, earthier brown
+SEA_COLOR        = "#bcd6e6"   # light sea blue
+
 if not compare_mode:
     st.subheader(f"{fld_title}  —  {LABEL}")
-
-    # Layout constants — fixed so switching fields/filters doesn't shift the map.
-    FIG_HEIGHT       = 520
-    RIGHT_MARGIN     = 80     # reserves space for the colorbar (no title) +
-                              # tick labels. With no field-name title, this is
-                              # constant across all 3 fields.
-    LAND_COLOR       = "#8b6f47"   # darker, earthier brown
-    SEA_COLOR        = "#bcd6e6"   # light sea blue
 
     fig = go.Figure()
 
