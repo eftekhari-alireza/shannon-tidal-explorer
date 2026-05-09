@@ -81,6 +81,10 @@ CELL_AREA_KM2 = meta["cell_area_km2"]
 CONFIGS_AVAIL = meta["configs"]    # list of dicts
 ALL_LABELS = [c["label"] for c in CONFIGS_AVAIL]
 
+# Detect whether parquet contains rEMEC columns (sensitivity criterion).
+# If not, the criterion toggle is hidden and the app forces bEMEC.
+HAS_REMEC = "rEMEC" in meta.get("criteria_available", ["bEMEC"])
+
 
 # --------------------------------------------------------------------------
 # URL STATE SHARING — read query params on load, sync session_state back
@@ -132,6 +136,9 @@ if "cmp_view" not in st.session_state:
     st.session_state["cmp_view"] = (
         "Side-by-side" if cmp_default == "sbs" else "Difference (B − A)"
     )
+if "criterion" not in st.session_state:
+    crit_default = qp.get("crit", "b").lower()
+    st.session_state["criterion"] = "rEMEC" if crit_default == "r" else "bEMEC"
 
 
 # --------------------------------------------------------------------------
@@ -187,6 +194,28 @@ else:
     LABEL_B = None
     cmp_view = None
 
+# --- depth criterion (NEW for §4.6 sensitivity) ----
+if HAS_REMEC:
+    criterion = st.sidebar.radio(
+        "Depth criterion:",
+        ["bEMEC (primary, §§4.1–4.5)", "rEMEC (relaxed, §4.6 sensitivity)"],
+        index=0 if st.session_state["criterion"] == "bEMEC" else 1,
+        key="criterion_label",
+        help=(
+            "**bEMEC** is the EMEC-baseline depth criterion adopted for the "
+            "headline §§4.1–4.5 results. **rEMEC** is the relaxed variant "
+            "obtained by reducing the per-rotor depth threshold by 2.5 m "
+            "(see §4.6 of the paper). Switching this changes which set of "
+            "viability/energy/CF columns is read from the parquet."
+        ),
+    )
+    st.session_state["criterion"] = (
+        "bEMEC" if criterion.startswith("bEMEC") else "rEMEC"
+    )
+
+CRITERION = st.session_state["criterion"]
+SUFFIX = "" if CRITERION == "bEMEC" else "_rEMEC"
+
 # --- field to display on map ----
 st.sidebar.subheader("2. Map field")
 field_choice = st.sidebar.radio(
@@ -240,12 +269,12 @@ def compute_display_grid(df, cfg, field_choice, masks):
     label = cfg["label"]
 
     if field_choice.startswith("Annual energy"):
-        col = f"{label}_energy_mwh"
+        col = f"{label}_energy_mwh{SUFFIX}"
         title = "Annual energy (MWh/yr)"
         cmap = "Viridis"
         hover_fmt = ":.1f"
     elif field_choice.startswith("Capacity factor"):
-        col = f"{label}_cf_pct"
+        col = f"{label}_cf_pct{SUFFIX}"
         title = "Capacity factor (%)"
         cmap = "Plasma"
         hover_fmt = ":.1f"
@@ -325,7 +354,7 @@ if exclude_shipping:
 if sites_only:
     keep &= df["in_any_site"].values
 if viable_only:
-    keep &= df[f"{LABEL}_viable"].values.astype(bool)
+    keep &= df[f"{LABEL}_viable{SUFFIX}"].values.astype(bool)
 
 grid, fld_title, hover_fmt, cmap, zmin, zmax = compute_display_grid(
     df, cfg, field_choice, keep,
@@ -336,10 +365,12 @@ grid, fld_title, hover_fmt, cmap, zmin, zmax = compute_display_grid(
 # HEADER + SUMMARY METRICS
 # --------------------------------------------------------------------------
 st.title("Shannon Tidal Resource Explorer")
+_crit_tag = "**bEMEC** (primary)" if CRITERION == "bEMEC" else "**rEMEC** (relaxed, §4.6)"
 st.markdown(
     f"**{LABEL}** · D = **{cfg['D_m']} m** · "
     f"Vr = **{cfg['Vr_mps']} m/s** · "
-    f"Rated power = **{cfg['Pr_kW']:.1f} kW**"
+    f"Rated power = **{cfg['Pr_kW']:.1f} kW** · "
+    f"Criterion = {_crit_tag}"
 )
 
 # Stats over visible cells
@@ -347,11 +378,11 @@ visible = df[keep]
 n_visible = len(visible)
 
 # Derived metrics for THIS config in the visible region
-viable_mask = visible[f"{LABEL}_viable"].values.astype(bool)
+viable_mask = visible[f"{LABEL}_viable{SUFFIX}"].values.astype(bool)
 n_class3 = int(viable_mask.sum())
 area_class3_km2 = n_class3 * CELL_AREA_KM2
-energy_arr = visible[f"{LABEL}_energy_mwh"].values
-cf_arr     = visible[f"{LABEL}_cf_pct"].values
+energy_arr = visible[f"{LABEL}_energy_mwh{SUFFIX}"].values
+cf_arr     = visible[f"{LABEL}_cf_pct{SUFFIX}"].values
 mean_energy = float(np.nanmean(energy_arr[viable_mask])) if n_class3 else 0.0
 total_energy_gwh = float(np.nansum(energy_arr[viable_mask]) / 1000.0)
 mean_cf    = float(np.nanmean(cf_arr[viable_mask])) if n_class3 else 0.0
@@ -472,8 +503,8 @@ if not compare_mode:
     # Layer 3 — TOP-N highlight markers (red outlined circles), if enabled.
     if highlight_top:
         sort_col = (
-            f"{LABEL}_energy_mwh" if field_choice.startswith("Annual energy") else
-            f"{LABEL}_cf_pct"     if field_choice.startswith("Capacity factor") else
+            f"{LABEL}_energy_mwh{SUFFIX}" if field_choice.startswith("Annual energy") else
+            f"{LABEL}_cf_pct{SUFFIX}"     if field_choice.startswith("Capacity factor") else
             "peak_vel_mps"
         )
         visible_only = df[keep].copy()
@@ -792,9 +823,9 @@ with st.expander(
                 "D (m)":     c["D_m"],
                 "Vᵣ (m/s)": c["Vr_mps"],
                 "Pᵣ (kW)":  c["Pr_kW"],
-                "Class 3 viable": "✓" if cell[f"{c['label']}_viable"] else "—",
-                "Annual energy (MWh/yr)": round(float(cell[f"{c['label']}_energy_mwh"]), 1),
-                "Capacity factor (%)":    round(float(cell[f"{c['label']}_cf_pct"]), 2),
+                "Class 3 viable": "✓" if cell[f"{c['label']}_viable{SUFFIX}"] else "—",
+                "Annual energy (MWh/yr)": round(float(cell[f"{c['label']}_energy_mwh{SUFFIX}"]), 1),
+                "Capacity factor (%)":    round(float(cell[f"{c['label']}_cf_pct{SUFFIX}"]), 2),
             })
         st.dataframe(
             pd.DataFrame(rows),
@@ -824,11 +855,11 @@ with st.expander(
         th_unit, th_max = "m/s", 3.0
         th_step, th_default = 0.05, 1.5
     elif th_field.startswith("Annual"):
-        th_values = df[f"{LABEL}_energy_mwh"].values[estuary_only_arr]
+        th_values = df[f"{LABEL}_energy_mwh{SUFFIX}"].values[estuary_only_arr]
         th_max = max(float(np.max(th_values)), 1.0)
         th_unit, th_step, th_default = "MWh/yr", max(th_max / 100, 1.0), th_max / 4
     else:
-        th_values = df[f"{LABEL}_cf_pct"].values[estuary_only_arr]
+        th_values = df[f"{LABEL}_cf_pct{SUFFIX}"].values[estuary_only_arr]
         th_max = max(float(np.max(th_values)), 1.0)
         th_unit, th_step, th_default = "%", max(th_max / 100, 0.1), th_max / 4
 
@@ -912,8 +943,8 @@ with st.expander("Configuration comparison table", expanded=False):
     rows = []
     for c in CONFIGS_AVAIL:
         m = df[keep]
-        v = m[f"{c['label']}_viable"].values.astype(bool)
-        e = m[f"{c['label']}_energy_mwh"].values
+        v = m[f"{c['label']}_viable{SUFFIX}"].values.astype(bool)
+        e = m[f"{c['label']}_energy_mwh{SUFFIX}"].values
         rows.append({
             "Set":      c["label"],
             "D (m)":    c["D_m"],
@@ -935,14 +966,14 @@ _export_cols = [
     "i", "j", "x", "y",
     "in_estuary", "in_shipping", "in_any_site",
     "peak_vel_mps",
-    f"{LABEL}_viable",
-    f"{LABEL}_energy_mwh",
-    f"{LABEL}_cf_pct",
+    f"{LABEL}_viable{SUFFIX}",
+    f"{LABEL}_energy_mwh{SUFFIX}",
+    f"{LABEL}_cf_pct{SUFFIX}",
 ]
 _export_df = df.loc[keep, _export_cols].rename(columns={
-    f"{LABEL}_viable":     "viable",
-    f"{LABEL}_energy_mwh": "energy_mwh",
-    f"{LABEL}_cf_pct":     "cf_pct",
+    f"{LABEL}_viable{SUFFIX}":     "viable",
+    f"{LABEL}_energy_mwh{SUFFIX}": "energy_mwh",
+    f"{LABEL}_cf_pct{SUFFIX}":     "cf_pct",
     "peak_vel_mps":        "peak_vel",
 })
 _csv_bytes = _export_df.to_csv(index=False).encode("utf-8")
@@ -981,6 +1012,7 @@ if st.session_state["compare_mode"]:
     st.query_params["cmpmode"]  = (
         "sbs" if st.session_state["cmp_view"] == "Side-by-side" else "diff"
     )
+st.query_params["crit"] = "r" if st.session_state["criterion"] == "rEMEC" else "b"
 
 
 # --------------------------------------------------------------------------

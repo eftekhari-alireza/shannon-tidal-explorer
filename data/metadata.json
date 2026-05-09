@@ -1,6 +1,6 @@
 {
   "rows": 110019,
-  "columns": 60,
+  "columns": 105,
   "imax": 217,
   "jmax": 507,
   "delx_m": 189.0,
@@ -15,7 +15,9 @@
       "Vr_mps": 2.5,
       "Pr_kW": 1006.29,
       "n_class3": 215,
-      "n_class3_estuary": 215
+      "n_class3_estuary": 215,
+      "n_class3_rEMEC": 377,
+      "n_class3_rEMEC_estuary": 377
     },
     {
       "label": "Set02",
@@ -23,7 +25,9 @@
       "Vr_mps": 2.0,
       "Pr_kW": 515.22,
       "n_class3": 215,
-      "n_class3_estuary": 215
+      "n_class3_estuary": 215,
+      "n_class3_rEMEC": 380,
+      "n_class3_rEMEC_estuary": 380
     },
     {
       "label": "Set03",
@@ -31,7 +35,9 @@
       "Vr_mps": 2.5,
       "Pr_kW": 566.04,
       "n_class3": 709,
-      "n_class3_estuary": 709
+      "n_class3_estuary": 709,
+      "n_class3_rEMEC": 902,
+      "n_class3_rEMEC_estuary": 902
     },
     {
       "label": "Set04",
@@ -39,7 +45,9 @@
       "Vr_mps": 2.0,
       "Pr_kW": 289.81,
       "n_class3": 737,
-      "n_class3_estuary": 737
+      "n_class3_estuary": 737,
+      "n_class3_rEMEC": 939,
+      "n_class3_rEMEC_estuary": 937
     },
     {
       "label": "Set05",
@@ -47,7 +55,9 @@
       "Vr_mps": 2.5,
       "Pr_kW": 251.57,
       "n_class3": 1531,
-      "n_class3_estuary": 1531
+      "n_class3_estuary": 1531,
+      "n_class3_rEMEC": 1890,
+      "n_class3_rEMEC_estuary": 1890
     },
     {
       "label": "Set06",
@@ -55,7 +65,9 @@
       "Vr_mps": 2.0,
       "Pr_kW": 128.81,
       "n_class3": 1693,
-      "n_class3_estuary": 1690
+      "n_class3_estuary": 1690,
+      "n_class3_rEMEC": 2119,
+      "n_class3_rEMEC_estuary": 2113
     },
     {
       "label": "Set07",
@@ -63,7 +75,9 @@
       "Vr_mps": 2.5,
       "Pr_kW": 62.89,
       "n_class3": 2420,
-      "n_class3_estuary": 2420
+      "n_class3_estuary": 2420,
+      "n_class3_rEMEC": 2916,
+      "n_class3_rEMEC_estuary": 2916
     },
     {
       "label": "Set08",
@@ -71,7 +85,9 @@
       "Vr_mps": 2.0,
       "Pr_kW": 32.2,
       "n_class3": 2746,
-      "n_class3_estuary": 2738
+      "n_class3_estuary": 2738,
+      "n_class3_rEMEC": 3413,
+      "n_class3_rEMEC_estuary": 3403
     },
     {
       "label": "Set09",
@@ -79,7 +95,9 @@
       "Vr_mps": 2.5,
       "Pr_kW": 22.64,
       "n_class3": 2802,
-      "n_class3_estuary": 2802
+      "n_class3_estuary": 2802,
+      "n_class3_rEMEC": 3415,
+      "n_class3_rEMEC_estuary": 3415
     },
     {
       "label": "Set10",
@@ -87,7 +105,9 @@
       "Vr_mps": 2.0,
       "Pr_kW": 11.59,
       "n_class3": 3273,
-      "n_class3_estuary": 3265
+      "n_class3_estuary": 3265,
+      "n_class3_rEMEC": 3975,
+      "n_class3_rEMEC_estuary": 3964
     },
     {
       "label": "Set11",
@@ -95,7 +115,9 @@
       "Vr_mps": 1.5,
       "Pr_kW": 54.34,
       "n_class3": 2160,
-      "n_class3_estuary": 2127
+      "n_class3_estuary": 2127,
+      "n_class3_rEMEC": 2703,
+      "n_class3_rEMEC_estuary": 2667
     },
     {
       "label": "Set12",
@@ -103,7 +125,9 @@
       "Vr_mps": 1.5,
       "Pr_kW": 13.58,
       "n_class3": 3443,
-      "n_class3_estuary": 3403
+      "n_class3_estuary": 3403,
+      "n_class3_rEMEC": 4197,
+      "n_class3_rEMEC_estuary": 4155
     },
     {
       "label": "Set13",
@@ -111,7 +135,9 @@
       "Vr_mps": 1.5,
       "Pr_kW": 4.89,
       "n_class3": 4045,
-      "n_class3_estuary": 4005
+      "n_class3_estuary": 4005,
+      "n_class3_rEMEC": 4812,
+      "n_class3_rEMEC_estuary": 4769
     },
     {
       "label": "Set14",
@@ -119,7 +145,9 @@
       "Vr_mps": 1.5,
       "Pr_kW": 217.36,
       "n_class3": 242,
-      "n_class3_estuary": 220
+      "n_class3_estuary": 220,
+      "n_class3_rEMEC": 436,
+      "n_class3_rEMEC_estuary": 412
     },
     {
       "label": "Set15",
@@ -127,11 +155,17 @@
       "Vr_mps": 1.5,
       "Pr_kW": 122.26,
       "n_class3": 948,
-      "n_class3_estuary": 921
+      "n_class3_estuary": 921,
+      "n_class3_rEMEC": 1245,
+      "n_class3_rEMEC_estuary": 1214
     }
   ],
   "cp": 0.4,
   "rho": 1025.0,
   "hours_per_year": 8760,
-  "build_timestamp_utc": "2026-05-09T04:29:53Z"
+  "build_timestamp_utc": "2026-05-09T05:53:50Z",
+  "criteria_available": [
+    "bEMEC",
+    "rEMEC"
+  ]
 }
