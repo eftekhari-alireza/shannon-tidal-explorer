@@ -816,6 +816,43 @@ with st.expander(
         ctx[2].metric("In estuary",            "Yes" if cell["in_estuary"] else "No")
         ctx[3].metric("In shipping lane",      "Yes" if cell["in_shipping"] else "No")
 
+        # ----- Best config at this cell (per-cell argmax over 15 configs) -----
+        # Honours the selected criterion (bEMEC or rEMEC).
+        viable_configs = [
+            c for c in CONFIGS_AVAIL
+            if cell[f"{c['label']}_viable{SUFFIX}"]
+        ]
+        if viable_configs:
+            best_e = max(
+                viable_configs,
+                key=lambda c: float(cell[f"{c['label']}_energy_mwh{SUFFIX}"]),
+            )
+            best_cf = max(
+                viable_configs,
+                key=lambda c: float(cell[f"{c['label']}_cf_pct{SUFFIX}"]),
+            )
+            e_val  = float(cell[f"{best_e['label']}_energy_mwh{SUFFIX}"])
+            cf_val = float(cell[f"{best_cf['label']}_cf_pct{SUFFIX}"])
+
+            bs1, bs2 = st.columns(2)
+            bs1.success(
+                f"🏆 **Best by energy: {best_e['label']}**  \n"
+                f"D = {best_e['D_m']} m, Vr = {best_e['Vr_mps']} m/s  \n"
+                f"**{e_val:,.1f} MWh/yr**"
+            )
+            bs2.success(
+                f"🏆 **Best by CF: {best_cf['label']}**  \n"
+                f"D = {best_cf['D_m']} m, Vr = {best_cf['Vr_mps']} m/s  \n"
+                f"**{cf_val:.2f} %**"
+            )
+        else:
+            st.warning(
+                f"No turbine in the 15-config grid is Class 3 viable at "
+                f"cell (i={inspect_i}, j={inspect_j}) under the {CRITERION} "
+                f"criterion. Try a cell deeper in the central narrows, or "
+                f"switch the criterion."
+            )
+
         rows = []
         for c in CONFIGS_AVAIL:
             rows.append({
