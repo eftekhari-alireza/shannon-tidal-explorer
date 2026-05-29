@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+
+message: "If you use this software, please cite it as below."
+
+title: "Shannon Tidal Resource Explorer"
+
+authors:
+
+  - family-names: "Eftekhari"
+
+    given-names: "Alireza"
+
+    affiliation: "University of Galway"
+
+    # orcid: "https://orcid.org/0009-0000-3464-7847"
+
+abstract: >-
+
+  An interactive web application that turns DIVAST 2D hydrodynamic model
+
+  output into an explorable map of the Shannon Estuary's tidal-current
+
+  energy resource, covering 15 turbine configurations with spatial
+
+  filtering, sensitivity analysis and data export.
+
+keywords:
+
+  - tidal energy
+
+  - Shannon Estuary
+
+  - DIVAST
+
+  - hydrodynamic modelling
+
+  - marine renewable energy
+
+license: MIT
+
+repository-code: "https://github.com/eftekhari-alireza/shannon-tidal-explorer"
+
+url: "https://shannon-tidal-explorer.streamlit.app/"
+
+version: 1.0.0
+
+date-released: 2026-05-29
