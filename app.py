@@ -38,6 +38,7 @@ except ImportError:
 TOOL_DIR    = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE   = os.path.join(TOOL_DIR, "data", "shannon_grid.parquet")
 META_FILE   = os.path.join(TOOL_DIR, "data", "metadata.json")
+DIST_FILE   = os.path.join(TOOL_DIR, "data", "shannon_distributions.npz")
 
 
 # --------------------------------------------------------------------------
@@ -80,6 +81,78 @@ JMAX = meta["jmax"]
 CELL_AREA_KM2 = meta["cell_area_km2"]
 CONFIGS_AVAIL = meta["configs"]    # list of dicts
 ALL_LABELS = [c["label"] for c in CONFIGS_AVAIL]
+
+
+# --------------------------------------------------------------------------
+# SPEED-DISTRIBUTION LAYER  (optional — enables the custom-turbine panel)
+# --------------------------------------------------------------------------
+# Built by tool/build_distributions.py. Holds an annual speed-duration curve
+# per estuary cell plus the water-depth field, which together let the app
+# evaluate a turbine that was not part of the 15-configuration design grid.
+#
+# The depth and velocity criteria read the depth and peak-speed fields
+# directly. Energy and capacity factor integrate the user's power curve
+# against the cell's speed-duration curve.
+#
+# If the file is absent the app behaves exactly as before and the panel is
+# simply not offered.
+@st.cache_data(show_spinner="Loading speed distributions…")
+def load_distributions():
+    if not os.path.exists(DIST_FILE):
+        return None
+    z = np.load(DIST_FILE)
+    return {k: z[k] for k in z.files}
+
+
+DIST = load_distributions()
+HAS_CUSTOM = DIST is not None
+
+# Flat grid index -> row in the distribution arrays (-1 where absent).
+if HAS_CUSTOM:
+    DIST_ROW = np.full(IMAX * JMAX, -1, dtype=np.int32)
+    DIST_ROW[DIST["cell"]] = np.arange(len(DIST["cell"]), dtype=np.int32)
+
+RHO_SEAWATER = meta.get("rho", 1025.0)
+
+# Gauss-Legendre nodes for integrating a power curve across a speed bin. The
+# curve is strongly convex below rated and has hard kinks at cut-in, rated and
+# cut-out, so the bin MEAN matters — evaluating at the midpoint biases energy.
+_GL_X, _GL_W = np.polynomial.legendre.leggauss(8)
+
+
+def analytic_curve(D, Vr, cutin, cp, cutout=None):
+    """Standard cubic-to-rated curve, P in kW (Lewis et al. 2021, Eq. 3)."""
+    k = 0.5 * cp * RHO_SEAWATER * (np.pi * D ** 2 / 4.0) / 1000.0
+
+    def P(v):
+        v = np.asarray(v, dtype=float)
+        out = np.where(v < cutin, 0.0, k * np.minimum(v, Vr) ** 3)
+        if cutout is not None:
+            out = np.where(v > cutout, 0.0, out)
+        return out
+
+    P.rated_kW = k * Vr ** 3
+    return P
+
+
+def curve_bin_weights(P, edges):
+    """Mean power (kW) in each speed bin, assuming uniform density within it."""
+    lo, hi = edges[:-1], edges[1:]
+    mid, half = 0.5 * (lo + hi), 0.5 * (hi - lo)
+    nodes = mid[:, None] + half[:, None] * _GL_X[None, :]
+    return 0.5 * (P(nodes.ravel()).reshape(nodes.shape) * _GL_W[None, :]).sum(axis=1)
+
+
+def min_depth_for(D, clearance):
+    """
+    Paper Eq. 5 / Eq. 6, solved for the self-referential bottom clearance:
+
+        hmin = c + D + max(0.25 hmin, c)  ->  max(D + 2c, (D + c) / 0.75)
+
+    With c = 5 m this returns 13 / 15 / 20 / 26.67 / 33.33 m for
+    D = 3 / 5 / 10 / 15 / 20 m — the thresholds used for the published runs.
+    """
+    return max(D + 2.0 * clearance, (D + clearance) / 0.75)
 
 # Detect whether parquet contains rEMEC columns (sensitivity criterion).
 # If not, the criterion toggle is hidden and the app forces bEMEC.
@@ -145,7 +218,7 @@ if "criterion" not in st.session_state:
 # SIDEBAR — TURBINE SELECTOR + LAYER TOGGLES
 # --------------------------------------------------------------------------
 st.sidebar.title("Shannon Tidal Resource Explorer")
-st.sidebar.caption("Tier 1 prototype  |  DIVAST 2D model output")
+st.sidebar.caption("Tier 2  |  DIVAST 2D model output")
 
 # --- turbine selector ----
 st.sidebar.subheader("1. Turbine configuration")
@@ -163,8 +236,82 @@ selected_label = st.sidebar.selectbox(
 cfg = next(c for c in CONFIGS_AVAIL if c["label"] == selected_label)
 LABEL = cfg["label"]
 
+# --- custom turbine (NEW) ----
+# Specify any machine, not just the fifteen that were simulated. Energy and
+# capacity factor come from the reconstructed speed-duration curve at each
+# cell; viability comes from the exact depth and velocity criteria.
+CUSTOM_ON = False
+CUSTOM = {}
+if HAS_CUSTOM:
+    CUSTOM_ON = st.sidebar.checkbox(
+        "Define my own turbine",
+        key="custom_on",
+        help=(
+            "Replaces the selected configuration with a turbine of your own. "
+            "Every map, metric and export below then describes YOUR machine.\n\n"
+            "**Note to developer — accuracy.** Energy and capacity factor are "
+            "within about 1 % (median cell error) for rated velocities of "
+            "1.0–2.5 m/s with a cut-in of 0.45–0.75 m/s. Above 2.5 m/s the "
+            "90th-percentile cell error rises to roughly 10 %; below a 0.45 m/s "
+            "cut-in the speed distribution is unconstrained and error is not "
+            "characterised. Rotor diameter is exact at any value."
+        ),
+    )
+    if CUSTOM_ON:
+        with st.sidebar.expander("Turbine specification", expanded=True):
+            c_D = st.slider("Rotor diameter D (m)", 2.0, 25.0, 12.0, 0.5,
+                            key="c_D",
+                            help="Sets swept area and, through the clearance "
+                                 "rule, the minimum water depth.")
+            c_Vr = st.slider("Rated velocity Vr (m/s)", 0.8, 3.0, 1.80, 0.05,
+                             key="c_Vr")
+            c_auto = st.checkbox("Cut-in = 0.30 Vr", True, key="c_auto",
+                                 help="The Lewis et al. (2021) convention used "
+                                      "for the fifteen simulated designs.")
+            if c_auto:
+                c_cut = 0.30 * c_Vr
+                st.caption(f"Cut-in Vc = **{c_cut:.2f} m/s**")
+            else:
+                c_cut = st.slider("Cut-in Vc (m/s)", 0.10,
+                                  float(max(0.15, min(1.50, c_Vr - 0.05))),
+                                  float(min(0.60, c_Vr - 0.05)), 0.05,
+                                  key="c_cut")
+            c_cp = st.slider("Power coefficient Cp", 0.25, 0.50, 0.40, 0.01,
+                             key="c_cp",
+                             help="0.40 was used for the published runs; the "
+                                  "14-device mean in Lewis et al. (2021) is 0.37.")
+            c_useco = st.checkbox("Apply a cut-out speed", False, key="c_useco")
+            c_co = (st.slider("Cut-out (m/s)", float(c_Vr), 3.0,
+                              float(min(3.0, c_Vr + 0.5)), 0.05, key="c_co")
+                    if c_useco else None)
+
+            c_clr_mode = st.radio(
+                "Installation clearance",
+                ["EMEC 5 m (Eq. 5)", "Relaxed 4 m (Eq. 6)", "Custom"],
+                key="c_clrmode",
+                help="Top clearance c below LAT, bottom clearance the greater "
+                     "of c and 25 % of depth, giving "
+                     "hmin = max(D + 2c, (D + c) / 0.75).",
+            )
+            c_clr = (5.0 if c_clr_mode.startswith("EMEC")
+                     else 4.0 if c_clr_mode.startswith("Relaxed")
+                     else st.slider("Clearance c (m)", 1.0, 8.0, 5.0, 0.5,
+                                    key="c_clr"))
+
+            _P = analytic_curve(c_D, c_Vr, c_cut, c_cp, c_co)
+            _hmin = min_depth_for(c_D, c_clr)
+            st.markdown(
+                f"**Rated power** {_P.rated_kW:,.0f} kW &nbsp;·&nbsp; "
+                f"**swept area** {np.pi * c_D ** 2 / 4:,.0f} m² &nbsp;·&nbsp; "
+                f"**min depth** {_hmin:.1f} m LAT"
+            )
+            CUSTOM = dict(D=c_D, Vr=c_Vr, cutin=c_cut, cp=c_cp, cutout=c_co,
+                          clearance=c_clr, P=_P, hmin=_hmin)
+
 # --- compare mode (NEW) ----
-compare_mode = st.sidebar.checkbox(
+if CUSTOM_ON:
+    st.session_state["compare_mode"] = False
+compare_mode = False if CUSTOM_ON else st.sidebar.checkbox(
     "Compare with another turbine",
     key="compare_mode",
     help=(
@@ -215,6 +362,47 @@ if HAS_REMEC:
 
 CRITERION = st.session_state["criterion"]
 SUFFIX = "" if CRITERION == "bEMEC" else "_rEMEC"
+
+# --- evaluate the custom turbine (NEW) --------------------------------------
+# Three columns are written under the fixed name "CUSTOM", and LABEL is
+# repointed at them. Every downstream code path builds its column names from
+# LABEL + SUFFIX, so the maps, metrics, inspector, threshold curve and CSV
+# export all pick up the custom machine with no further changes.
+#
+# Note the columns are attached to the cached DataFrame. The names are fixed,
+# so a rerun overwrites rather than accumulating.
+if CUSTOM_ON:
+    T_SIM = float(DIST["T"])            # 8,928 h — the DIVAST accumulation
+                                        # period, so custom numbers are
+                                        # directly comparable with the
+                                        # published columns
+    mean_kW = DIST["phi"].astype(np.float32) @ curve_bin_weights(
+        CUSTOM["P"], DIST["edges"].astype(np.float64))
+
+    # Paper Eq. 4. Exact — neither term goes through the reconstruction.
+    viable_cells = ((DIST["vmax"] >= CUSTOM["cutin"]) &
+                    (DIST["h_lat"] >= CUSTOM["hmin"]))
+
+    energy_mwh = np.where(viable_cells, mean_kW * T_SIM / 1000.0, 0.0)
+    cf_pct = np.where(viable_cells,
+                      mean_kW / max(CUSTOM["P"].rated_kW, 1e-9) * 100.0, 0.0)
+
+    _n = len(df)
+    _e = np.zeros(_n, np.float32)
+    _c = np.zeros(_n, np.float32)
+    _v = np.zeros(_n, bool)
+    _idx = DIST["cell"]
+    _e[_idx], _c[_idx], _v[_idx] = energy_mwh, cf_pct, viable_cells
+    df["CUSTOM_energy_mwh"] = _e
+    df["CUSTOM_cf_pct"] = _c
+    df["CUSTOM_viable"] = _v
+
+    LABEL = "CUSTOM"
+    SUFFIX = ""
+    # compute_display_grid() and the export build column names from
+    # cfg["label"], so it must be the column stem, not a pretty name.
+    cfg = {"label": "CUSTOM", "display": "Custom turbine", "D_m": CUSTOM["D"],
+           "Vr_mps": CUSTOM["Vr"], "Pr_kW": CUSTOM["P"].rated_kW}
 
 # --- field to display on map ----
 st.sidebar.subheader("2. Map field")
@@ -365,13 +553,36 @@ grid, fld_title, hover_fmt, cmap, zmin, zmax = compute_display_grid(
 # HEADER + SUMMARY METRICS
 # --------------------------------------------------------------------------
 st.title("Shannon Tidal Resource Explorer")
-_crit_tag = "**bEMEC** (primary)" if CRITERION == "bEMEC" else "**rEMEC** (relaxed, §4.6)"
-st.markdown(
-    f"**{LABEL}** · D = **{cfg['D_m']} m** · "
-    f"Vr = **{cfg['Vr_mps']} m/s** · "
-    f"Rated power = **{cfg['Pr_kW']:.1f} kW** · "
-    f"Criterion = {_crit_tag}"
-)
+if CUSTOM_ON:
+    _co = f" · cut-out **{CUSTOM['cutout']:.2f} m/s**" if CUSTOM["cutout"] else ""
+    st.markdown(
+        f"**Custom turbine** · D = **{cfg['D_m']:g} m** · "
+        f"Vr = **{cfg['Vr_mps']:.2f} m/s** · "
+        f"cut-in **{CUSTOM['cutin']:.2f} m/s** · "
+        f"Cp = **{CUSTOM['cp']:.2f}** · "
+        f"Rated power = **{cfg['Pr_kW']:,.0f} kW**{_co} · "
+        f"clearance **{CUSTOM['clearance']:g} m** "
+        f"(min depth {CUSTOM['hmin']:.1f} m LAT)"
+    )
+    _warn = []
+    if not (1.0 <= CUSTOM["Vr"] <= 2.5):
+        _warn.append(f"a rated velocity of {CUSTOM['Vr']:.2f} m/s sits outside "
+                     f"the 1.0–2.5 m/s range this tool is calibrated over")
+    if CUSTOM["cutin"] < 0.45:
+        _warn.append(f"a cut-in of {CUSTOM['cutin']:.2f} m/s is below 0.45 m/s, "
+                     f"the lowest speed the underlying data constrains")
+    if _warn:
+        st.warning("Energy and capacity factor are less reliable here: "
+                   + "; ".join(_warn) + ".")
+else:
+    _crit_tag = ("**bEMEC** (primary)" if CRITERION == "bEMEC"
+                 else "**rEMEC** (relaxed, §4.6)")
+    st.markdown(
+        f"**{LABEL}** · D = **{cfg['D_m']} m** · "
+        f"Vr = **{cfg['Vr_mps']} m/s** · "
+        f"Rated power = **{cfg['Pr_kW']:.1f} kW** · "
+        f"Criterion = {_crit_tag}"
+    )
 
 # Stats over visible cells
 visible = df[keep]
@@ -815,6 +1026,50 @@ with st.expander(
         ctx[1].metric("Avg power density",     f"{cell['avg_pd_kwm2']:.2f} kW/m²")
         ctx[2].metric("In estuary",            "Yes" if cell["in_estuary"] else "No")
         ctx[3].metric("In shipping lane",      "Yes" if cell["in_shipping"] else "No")
+
+        # ----- speed-duration curve at this cell (NEW) --------------------
+        # How long the cell spends at each speed over the year, rather than
+        # just its peak. Shown only in custom-turbine mode, so the default
+        # view is unchanged.
+        if CUSTOM_ON:
+            _row = int(DIST_ROW[inspect_i * JMAX + inspect_j])
+            if _row >= 0 and DIST["phi"][_row].sum() > 0:
+                _phi = DIST["phi"][_row].astype(np.float64)
+                _edges = DIST["edges"].astype(np.float64)
+                _exc = np.clip(np.concatenate([[1.0], 1.0 - np.cumsum(_phi)]),
+                               0.0, 1.0)
+                _hrs = _exc * float(DIST["T"])
+
+                dc = go.Figure()
+                dc.add_trace(go.Scatter(
+                    x=_edges, y=_hrs, mode="lines", fill="tozeroy",
+                    line=dict(color="#1565A0", width=2),
+                    fillcolor="rgba(21,101,160,0.15)", showlegend=False,
+                    hovertemplate="Speed ≥ %{x:.2f} m/s<br>"
+                                  "%{y:,.0f} h/yr<extra></extra>",
+                ))
+                for _nm, _v, _col in [("cut-in", CUSTOM["cutin"], "#2a9d8f"),
+                                      ("rated", CUSTOM["Vr"], "#d1495b")]:
+                    dc.add_vline(x=_v, line=dict(color=_col, dash="dash", width=1.5),
+                                 annotation_text=_nm, annotation_position="top")
+                dc.update_layout(
+                    height=240, margin=dict(l=60, r=20, t=24, b=40),
+                    plot_bgcolor="white", font=dict(size=10),
+                    xaxis_title="Current speed (m/s)",
+                    yaxis_title="Hours per year at or above",
+                )
+                dc.update_xaxes(showgrid=True, gridcolor="#eeeeee",
+                                range=[0, float(cell["peak_vel_mps"]) * 1.05 or 1])
+                dc.update_yaxes(showgrid=True, gridcolor="#eeeeee")
+                st.markdown("**Speed-duration curve at this cell**")
+                st.plotly_chart(dc, use_container_width=True,
+                                config={"displaylogo": False})
+                _q = [np.interp(f, _exc[::-1], _edges[::-1])
+                      for f in (0.5, 0.25, 0.10)]
+                st.caption(
+                    f"Exceeded 50 % of the year: **{_q[0]:.2f} m/s** · "
+                    f"25 %: **{_q[1]:.2f} m/s** · 10 %: **{_q[2]:.2f} m/s**."
+                )
 
         # ----- Best config at this cell (per-cell argmax over 15 configs) -----
         # Honours the selected criterion (bEMEC or rEMEC).
