@@ -505,10 +505,8 @@ In rough priority order:
 ## Project context
 
 This tool is part of the Shannon Estuary tidal-energy assessment
-research (University of Galway, 2026), supervised by Dr Stephen Nash
-(with Dr Michael Hartnett). The DIVAST 2D depth-integrated model
-(Falconer 1992) was run for a 5 × 3 turbine design grid; the analysis
-and figures live in `Final_Results/` (sections 4.1–4.6 of the paper).
+research (University of Galway, 2026), supervised by Dr Stephen Nash. The DIVAST 2D depth-integrated model
+(Falconer 1992) was run for a 5 × 3 turbine design grid.
 
 ---
 
